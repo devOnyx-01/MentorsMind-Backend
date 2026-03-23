@@ -5,7 +5,7 @@ import config from './config';
 import { corsMiddleware } from './middleware/cors.middleware';
 import { securityMiddleware, sanitizeInput } from './middleware/security.middleware';
 import { requestLogger } from './middleware/logging.middleware';
-import { generalLimiter } from './middleware/rateLimit.middleware';
+import { generalLimiter } from './middleware/rate-limit.middleware';
 import { errorHandler } from './middleware/errorHandler';
 import { notFoundHandler } from './middleware/notFoundHandler';
 import { swaggerOptions } from './config/swagger';
