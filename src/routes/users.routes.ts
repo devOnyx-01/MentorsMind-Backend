@@ -8,8 +8,8 @@ import {
   updateUserSchema,
   updateMeSchema,
   avatarUploadSchema,
-  idParamSchema,
-} from '../validators/users.validator';
+} from '../validators/schemas/users.schemas';
+import { idParamSchema } from '../validators/schemas/common.schemas';
 
 const router = Router();
 
