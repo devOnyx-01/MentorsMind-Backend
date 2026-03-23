@@ -1,11 +1,13 @@
 import { Router } from 'express';
 import { ResponseUtil } from '../utils/response.utils';
 import authRoutes from './auth.routes';
+import usersRoutes from './users.routes';
 
 const router = Router();
 
 // Mount route modules
 router.use('/auth', authRoutes);
+router.use('/users', usersRoutes);
 
 // API version info endpoint
 router.get('/', (req, res) => {

@@ -26,12 +26,8 @@ export const sanitizeInput = (req: Request, _res: Response, next: NextFunction):
   if (req.body) {
     req.body = sanitizeObject(req.body);
   }
-  if (req.query) {
-    req.query = sanitizeObject(req.query);
-  }
-  if (req.params) {
-    req.params = sanitizeObject(req.params);
-  }
+  // req.query and req.params are read-only getters in Express 5
+  // sanitize body only; query/params are validated via Zod schemas
   next();
 };
 
