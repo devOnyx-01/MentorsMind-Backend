@@ -49,3 +49,8 @@ temp/
 # Misc
 .cache/
 .temp/
+
+.agents/
+.claude/
+issue.md
+skills-lock.json
