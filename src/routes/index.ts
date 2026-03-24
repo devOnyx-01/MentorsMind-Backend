@@ -3,6 +3,7 @@ import { ResponseUtil } from '../utils/response.utils';
 import authRoutes from './auth.routes';
 import usersRoutes from './users.routes';
 import adminRoutes from './admin.routes';
+import timezoneRoutes from './timezone.routes';
 import { AdminService } from '../services/admin.service';
 
 const router = Router();
@@ -16,6 +17,7 @@ AdminService.initialize().catch(err => {
 router.use('/auth', authRoutes);
 router.use('/users', usersRoutes);
 router.use('/admin', adminRoutes);
+router.use('/timezones', timezoneRoutes);
 
 /**
  * @swagger

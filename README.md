@@ -14,6 +14,8 @@ Backend API server for the MentorMinds Stellar platform, built with Node.js, Exp
 - **Logging** with Morgan
 - **Environment Configuration** with dotenv
 - **Interactive API Docs** with Swagger UI (OpenAPI 3.0)
+- **Timezone Handling** with Luxon (IANA timezones, DST-aware)
+- **Session Reminders** with cron-based scheduling
 
 ## 📖 API Documentation
 
@@ -117,12 +119,18 @@ GET /health
 GET /api/v1
 ```
 
+### Timezone API
+```
+GET /api/v1/timezones - List all IANA timezones
+GET /api/v1/timezones/:identifier - Get timezone details
+```
+
 ### Coming Soon
 - `POST /api/v1/auth/register` - User registration
 - `POST /api/v1/auth/login` - User login
 - `GET /api/v1/users/:id` - Get user profile
 - `GET /api/v1/mentors` - List mentors
-- `POST /api/v1/bookings` - Create booking
+- `POST /api/v1/bookings` - Create booking (with timezone support)
 - `POST /api/v1/payments` - Process payment
 - `GET /api/v1/wallets/:id` - Get wallet info
 
@@ -175,6 +183,8 @@ npm test
 - **Validation**: Zod
 - **Security**: Helmet, CORS
 - **Logging**: Morgan
+- **Timezone**: Luxon (IANA timezones, DST-aware)
+- **Scheduling**: Cron (session reminders)
 
 ## 🚧 Development Roadmap
 
@@ -194,7 +204,10 @@ npm test
 
 - [API Documentation](./docs/API.md) (coming soon)
 - [Database Schema](./docs/DATABASE.md) (coming soon)
-- [Stellar Integration](./docs/STELLAR.md) (coming soon)
+- [Stellar Integration](./docs/STELLAR_SERVICE.md)
+- [Timezone Handling Guide](./docs/timezone-handling.md)
+- [DST Edge Cases](./docs/dst-edge-cases.md)
+- [Implementation Summary](./docs/IMPLEMENTATION_SUMMARY.md)
 
 ## 🤝 Contributing
 
