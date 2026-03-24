@@ -5,6 +5,7 @@ import { redisConfig } from '../config/redis.config';
 import { logger } from '../utils/logger.utils';
 import promClient, { Registry, Gauge, Histogram, Counter } from 'prom-client';
 import config from '../config';
+import { CURRENT_VERSION } from '../config/api-versions.config';
 import * as os from 'node:os';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -237,9 +238,9 @@ export class HealthService {
       overall,
       timestamp: new Date().toISOString(),
       components,
-      version: config.apiVersion || 'dev',
+      version: config.server.apiVersion || CURRENT_VERSION,
       uptime: process.uptime(),
-      environment: config.nodeEnv,
+      environment: config.env,
     };
     
     const duration = Date.now() - start;

@@ -31,6 +31,7 @@ router.use('/bookings', bookingsRoutes);
 router.use('/timezones', timezoneRoutes);
 router.use('/payments', paymentsRoutes);
 
+// ── Root info ────────────────────────────────────────────────────────────────
 /**
  * @swagger
  * /:
@@ -40,33 +41,28 @@ router.use('/payments', paymentsRoutes);
  *     responses:
  *       200:
  *         description: API info
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ApiResponse'
  */
 router.get('/', (_req, res) => {
   ResponseUtil.success(
     res,
     {
-      version: '1.0.0',
+      version: CURRENT_VERSION,
+      supportedVersions: SUPPORTED_VERSIONS,
       name: 'MentorMinds Stellar API',
       description: 'Backend API for MentorMinds platform',
       endpoints: {
         health: '/health',
         auth: '/api/v1/auth',
         users: '/api/v1/users',
-        mentors: '/api/v1/mentors',
         bookings: '/api/v1/bookings',
-        payments: '/api/v1/payments',
-        wallets: '/api/v1/wallets',
       },
-      documentation: '/api/docs',
+      documentation: '/api/v1/docs',
     },
     'Welcome to MentorMinds API',
   );
 });
 
+// ── Health ───────────────────────────────────────────────────────────────────
 /**
  * @swagger
  * /health:
@@ -76,20 +72,6 @@ router.get('/', (_req, res) => {
  *     responses:
  *       200:
  *         description: Service is healthy
- *         content:
- *           application/json:
- *             schema:
- *               allOf:
- *                 - $ref: '#/components/schemas/ApiResponse'
- *                 - type: object
- *                   properties:
- *                     data:
- *                       type: object
- *                       properties:
- *                         uptime: { type: number, example: 3600 }
- *                         timestamp: { type: string, format: date-time }
- *                         environment: { type: string, example: production }
- *                         version: { type: string, example: v1 }
  */
 router.get('/health', asyncHandler(HealthController.getHealth));
 
@@ -102,29 +84,21 @@ router.get('/health', asyncHandler(HealthController.getHealth));
  *     responses:
  *       200:
  *         description: Service is ready
- *         content:
- *           application/json:
- *             schema:
- *               allOf:
- *                 - $ref: '#/components/schemas/ApiResponse'
- *                 - type: object
- *                   properties:
- *                     data:
- *                       type: object
- *                       properties:
- *                         database: { type: boolean }
- *                         stellar: { type: boolean }
  *       503:
  *         description: Service not ready
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.get('/ready', asyncHandler(async (req, res) => {
-  const health = await HealthService.checkHealth();
-  const isReady = health.overall === 'healthy';
-  ResponseUtil.success(res, { ...health, isReady }, isReady ? 'Service is ready' : 'Service degraded', isReady ? 200 : 503);
-}));
+router.get(
+  '/ready',
+  asyncHandler(async (_req, res) => {
+    const health = await HealthService.checkHealth();
+    const isReady = health.overall === 'healthy';
+    ResponseUtil.success(
+      res,
+      { ...health, isReady },
+      isReady ? 'Service is ready' : 'Service degraded',
+      isReady ? 200 : 503,
+    );
+  }),
+);
 
 export default router;

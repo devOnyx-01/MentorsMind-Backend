@@ -3,10 +3,23 @@ import config from './config';
 import app from './app';
 import { initializeModels } from './models';
 import { initWebSocketServer } from './websocket/ws-server';
+import {
+  emailWorker,
+  paymentWorker,
+  escrowReleaseWorker,
+  reportWorker,
+  startScheduler,
+  stopScheduler,
+} from './workers';
 
 // Initialize database tables
 initializeModels().catch((err) => {
   console.error('Failed to initialize models:', err);
+});
+
+// Start background job workers and scheduler
+startScheduler().catch((err) => {
+  console.error('Failed to start job scheduler:', err);
 });
 
 const { port: PORT, apiVersion: API_VERSION } = config.server;
@@ -26,20 +39,22 @@ const server = app.listen(PORT, () => {
 initWebSocketServer(server);
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM signal received: closing HTTP server');
+async function shutdown(signal: string) {
+  console.log(`${signal} signal received: closing HTTP server`);
+  await Promise.all([
+    emailWorker.close(),
+    paymentWorker.close(),
+    escrowReleaseWorker.close(),
+    reportWorker.close(),
+    stopScheduler(),
+  ]);
   server.close(() => {
     console.log('HTTP server closed');
     process.exit(0);
   });
-});
+}
 
-process.on('SIGINT', () => {
-  console.log('SIGINT signal received: closing HTTP server');
-  server.close(() => {
-    console.log('HTTP server closed');
-    process.exit(0);
-  });
-});
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 export default app;
