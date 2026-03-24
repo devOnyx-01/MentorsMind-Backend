@@ -13,6 +13,8 @@ import { errorHandler } from './middleware/errorHandler';
 import { notFoundHandler } from './middleware/notFoundHandler';
 import { swaggerOptions } from './config/swagger';
 import routes from './routes';
+import HealthService from './services/health.service';
+import { metricsMiddleware } from './middleware/metrics.middleware';
 
 const app: Application = express();
 const { apiVersion } = config.server;
@@ -28,6 +30,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 app.use(sanitizeInput);
 app.use(generalLimiter);
+app.use(metricsMiddleware);
 app.set('trust proxy', 1);
 
 // Swagger docs
@@ -44,6 +47,11 @@ app.use(
 app.get(`/api/${apiVersion}/docs/spec.json`, (_req, res) => {
   res.setHeader('Content-Type', 'application/json');
   res.send(swaggerSpec);
+});
+
+// Initialize health service
+HealthService.initialize().catch((err) => {
+  console.error('HealthService initialization failed:', err);
 });
 
 // API routes
