@@ -1,13 +1,14 @@
 import { Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import config from '../config';
 import { AuthenticatedRequest } from '../types/api.types';
 import { ResponseUtil } from '../utils/response.utils';
+import { JwtUtils } from '../utils/jwt.utils';
+import { TokenService } from '../services/token.service';
 
 export const authenticate = async (
   req: AuthenticatedRequest,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const authHeader = req.headers.authorization;
@@ -18,10 +19,17 @@ export const authenticate = async (
     }
 
     const token = authHeader.substring(7);
-    const decoded = jwt.verify(token, config.jwt.secret) as any;
+    const decoded = JwtUtils.verifyAccessToken(token);
+
+    // Check if token is blacklisted
+    const isBlacklisted = await TokenService.isTokenBlacklisted(decoded.jti);
+    if (isBlacklisted) {
+      ResponseUtil.unauthorized(res, 'Token has been revoked');
+      return;
+    }
 
     req.user = {
-      id: decoded.id,
+      id: decoded.userId,
       email: decoded.email,
       role: decoded.role,
     };
@@ -41,7 +49,11 @@ export const authenticate = async (
 };
 
 export const authorize = (...roles: string[]) => {
-  return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
+  return (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction,
+  ): void => {
     if (!req.user) {
       ResponseUtil.unauthorized(res, 'Authentication required');
       return;

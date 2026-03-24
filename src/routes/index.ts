@@ -8,12 +8,18 @@ import bookingsRoutes from './bookings.routes';
 import timezoneRoutes from './timezone.routes';
 import walletsRoutes from './wallets.routes';
 import { AdminService } from '../services/admin.service';
+import { BookingsService } from '../services/bookings.service';
 
 const router = Router();
 
 // Initialize admin tables (async, don't block)
 AdminService.initialize().catch((err) => {
   console.error('Failed to initialize admin tables:', err);
+});
+
+// Initialize bookings tables (async, don't block)
+BookingsService.initialize().catch(err => {
+  console.error('Failed to initialize bookings tables:', err);
 });
 
 // Mount route modules

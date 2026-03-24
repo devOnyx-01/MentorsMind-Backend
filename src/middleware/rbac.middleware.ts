@@ -39,3 +39,8 @@ export const requireOwnerOrAdmin = (
   }
   ResponseUtil.forbidden(res, 'Access denied');
 };
+
+/**
+ * Require admin role.
+ */
+export const requireAdmin = requireRole('admin');
