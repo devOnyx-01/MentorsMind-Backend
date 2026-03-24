@@ -1,0 +1,23 @@
+MENTORMINDS - Session Reminder ⏰
+
+Your session starts in {{timeUntil}}!
+
+Session Details:
+================
+👨‍🏫 Mentor: {{mentorName}}
+📅 Time: {{sessionTime}}
+⏱️ Duration: {{duration}} minutes
+
+Join Meeting: {{meetingUrl}}
+
+💡 Tips for a great session:
+- Test your audio and video beforehand
+- Prepare any questions you want to ask
+- Find a quiet space for the call
+- Have a notepad ready for taking notes
+
+Best regards,
+The MentorMinds Team
+
+Visit MentorMinds: {{platformUrl}}
+Support: {{supportUrl}}

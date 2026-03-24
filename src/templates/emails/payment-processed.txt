@@ -1,0 +1,20 @@
+MENTORMINDS - Payment Processed Successfully ✅
+
+Payment Details:
+================
+💰 Amount: {{amount}} XLM
+📋 Transaction ID: {{transactionId}}
+📅 Date: {{paymentDate}}
+🎯 Purpose: {{purpose}}
+
+✅ Payment Status: {{status}}
+
+Your payment has been successfully processed and recorded on the Stellar blockchain.
+
+View Transaction: {{transactionUrl}}
+
+Best regards,
+The MentorMinds Team
+
+Visit MentorMinds: {{platformUrl}}
+Support: {{supportUrl}}

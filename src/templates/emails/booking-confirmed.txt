@@ -1,0 +1,22 @@
+MENTORMINDS - Booking Confirmed! 🎉
+
+Session Details:
+================
+📅 Date & Time: {{sessionDate}} at {{sessionTime}}
+⏱️ Duration: {{duration}} minutes
+👨‍🏫 Mentor: {{mentorName}}
+💰 Amount: {{amount}} XLM
+📋 Session Type: {{sessionType}}
+
+📝 Next Steps:
+- You'll receive a meeting link 15 minutes before the session
+- Payment will be held in escrow until session completion
+- Please be on time for your session
+
+We're excited for your mentorship session!
+
+Best regards,
+The MentorMinds Team
+
+Visit MentorMinds: {{platformUrl}}
+Support: {{supportUrl}}
