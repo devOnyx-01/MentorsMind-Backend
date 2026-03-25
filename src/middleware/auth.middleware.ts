@@ -1,69 +1,59 @@
-import { Response, NextFunction } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { AuthenticatedRequest } from '../types/api.types';
-import { ResponseUtil } from '../utils/response.utils';
-import { JwtUtils } from '../utils/jwt.utils';
-import { TokenService } from '../services/token.service';
 
-export const authenticate = async (
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction,
-): Promise<void> => {
+const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret';
+
+export interface AuthenticatedRequest extends Request {
+  user?: {
+    userId: string;
+    role: string;
+  };
+}
+
+export const authenticate = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const authHeader = req.headers.authorization;
-
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      ResponseUtil.unauthorized(res, 'No token provided');
-      return;
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required. Please provide a valid Bearer token.',
+      });
     }
 
-    const token = authHeader.substring(7);
-    const decoded = JwtUtils.verifyAccessToken(token);
+    const token = authHeader.split(' ')[1];
 
-    // Check if token is blacklisted
-    const isBlacklisted = await TokenService.isTokenBlacklisted(decoded.jti);
-    if (isBlacklisted) {
-      ResponseUtil.unauthorized(res, 'Token has been revoked');
-      return;
-    }
+    // Verify the JWT token
+    const decoded = jwt.verify(token, JWT_SECRET) as { sub: string; role: string };
 
     req.user = {
-      id: decoded.userId,
-      email: decoded.email,
+      userId: decoded.sub,
       role: decoded.role,
     };
 
     next();
   } catch (error) {
-    if (error instanceof jwt.JsonWebTokenError) {
-      ResponseUtil.unauthorized(res, 'Invalid token');
-      return;
-    }
     if (error instanceof jwt.TokenExpiredError) {
-      ResponseUtil.unauthorized(res, 'Token expired');
-      return;
+      return res.status(401).json({
+        success: false,
+        error: 'Token expired.',
+      });
     }
-    next(error);
+
+    return res.status(401).json({
+      success: false,
+      error: 'Invalid token.',
+    });
   }
 };
 
-export const authorize = (...roles: string[]) => {
-  return (
-    req: AuthenticatedRequest,
-    res: Response,
-    next: NextFunction,
-  ): void => {
-    if (!req.user) {
-      ResponseUtil.unauthorized(res, 'Authentication required');
-      return;
+export const requireRole = (roles: string[]) => {
+  return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    if (!req.user || !roles.includes(req.user.role)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied. Insufficient permissions.',
+      });
     }
-
-    if (roles.length && !roles.includes(req.user.role)) {
-      ResponseUtil.forbidden(res, 'Insufficient permissions');
-      return;
-    }
-
     next();
   };
 };
