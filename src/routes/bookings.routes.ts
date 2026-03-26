@@ -172,8 +172,8 @@ router.delete('/:id/cancel', authenticate, BookingsController.cancelBooking);
  *                   properties:
  *                     session:
  *                       $ref: '#/components/schemas/Session'
- *       200:
- *         description: Booking confirmed but meeting URL failed
+ *       207:
+ *         description: Booking confirmed but meeting URL failed (partial success)
  *         content:
  *           application/json:
  *             schema:

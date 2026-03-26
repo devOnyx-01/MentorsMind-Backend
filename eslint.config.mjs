@@ -7,7 +7,7 @@ export default tseslint.config(
   {
     languageOptions: {
       parserOptions: {
-        project: './tsconfig.json',
+        project: ['./tsconfig.json', './packages/*/tsconfig.json'],
         tsconfigRootDir: import.meta.dirname,
       },
     },
@@ -18,6 +18,6 @@ export default tseslint.config(
     },
   },
   {
-    ignores: ['dist/**', 'node_modules/**', 'jest.config.js', 'jest.config.ts', 'jest.ws.config.ts', 'jest.unit.config.ts', '**/*.test.ts', 'src/**/__tests__/**', 'eslint.config.mjs'],
+    ignores: ['dist/**', 'node_modules/**', 'jest.config.js', 'jest.config.ts', 'jest.ws.config.ts', 'jest.unit.config.ts', '**/*.test.ts', 'src/**/__tests__/**', 'eslint.config.mjs', 'packages/**/dist/**'],
   }
 );

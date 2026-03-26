@@ -1,19 +1,17 @@
 # Dependencies
 node_modules/
-package-lock.json
-yarn.lock
-pnpm-lock.yaml
-.kiro
-# Environment variables
-.env
-.env.local
-.env.*.local
-.env.test
+packages/*/node_modules/
 
-# Build output
+# Build outputs
 dist/
 build/
 *.tsbuildinfo
+packages/*/dist/
+
+# Environment
+.env
+.env.local
+.env.*.local
 
 # Logs
 logs/
@@ -21,11 +19,6 @@ logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-lerna-debug.log*
-
-# OS files
-.DS_Store
-Thumbs.db
 
 # IDE
 .vscode/
@@ -34,25 +27,22 @@ Thumbs.db
 *.swo
 *~
 
-# Testing
+# OS
+.DS_Store
+Thumbs.db
+
+# Test coverage
 coverage/
 .nyc_output/
 
-# Uploads
-uploads/
+# Temporary files
+tmp/
 temp/
+*.tmp
+
+# OpenAPI
+openapi.main.json
 
 # Database
 *.db
 *.sqlite
-*.sqlite3
-
-# Misc
-.cache/
-.temp/
-
-.agents/
-.claude/
-issue.md
-skills-lock.json
-skills-lock.json

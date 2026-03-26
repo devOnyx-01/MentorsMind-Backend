@@ -5,7 +5,7 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
-    "build": "tsc",
+    "build": "tsc && npm run generate:spec",
     "start": "node dist/server.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -13,12 +13,16 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
+    "test:contract": "jest --config=jest.contract.config.ts",
     "seed": "ts-node --project tsconfig.seed.json database/seeds/index.ts",
     "seed:reset": "ts-node --project tsconfig.seed.json database/seeds/index.ts --reset",
     "seed:test": "ts-node --project tsconfig.seed.json database/seeds/index.ts --size=test",
     "migrate:up": "node-pg-migrate up --database-url-var DATABASE_URL --migrations-dir database/migrations",
     "migrate:down": "node-pg-migrate down --database-url-var DATABASE_URL --migrations-dir database/migrations",
     "migrate:create": "node-pg-migrate create --migrations-dir database/migrations",
+    "generate:spec": "node scripts/generate-openapi-spec.js",
+    "generate:types": "npm run generate:spec && node scripts/generate-api-types.js",
+    "check:breaking": "node scripts/check-breaking-changes.js",
     "prepare": "husky"
   },
   "keywords": [
@@ -69,6 +73,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@apidevtools/swagger-parser": "^12.1.0",
     "@eslint/js": "^10.0.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.19",
@@ -95,6 +100,8 @@
     "lint-staged": "^16.4.0",
     "node-pg-migrate": "^8.0.4",
     "nodemon": "^3.1.14",
+    "openapi-diff": "^0.24.1",
+    "openapi-typescript": "^7.13.0",
     "prettier": "^3.8.1",
     "supertest": "^7.2.2",
     "ts-jest": "^29.4.6",
