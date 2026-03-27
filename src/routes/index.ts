@@ -1,22 +1,18 @@
-import { Router } from 'express';
-import { ResponseUtil } from '../utils/response.utils';
-import authRoutes from './auth.routes';
-import usersRoutes from './users.routes';
-import exportRoutes from './export.routes';
-import adminRoutes from './admin.routes';
-import bookingsRoutes from './bookings.routes';
-import timezoneRoutes from './timezone.routes';
-import mentorsRoutes from './mentors.routes';
-import paymentsRoutes from './payments.routes';
-import reviewsRoutes from './reviews.routes';
-import { AdminService } from '../services/admin.service';
-import { BookingsService } from '../services/bookings.service';
-import { notificationCleanupService } from '../services/notification-cleanup.service';
-import { logger } from '../utils/logger';
-import { CURRENT_VERSION, SUPPORTED_VERSIONS } from '../config/api-versions.config';
-import { asyncHandler } from '../utils/asyncHandler.utils';
-import { HealthController } from '../controllers/health.controller';
-import HealthService from '../services/health.service';
+import { Router } from "express";
+import { ResponseUtil } from "../utils/response.utils";
+import authRoutes from "./auth.routes";
+import usersRoutes from "./users.routes";
+import exportRoutes from "./export.routes";
+import adminRoutes from "./admin.routes";
+import bookingsRoutes from "./bookings.routes";
+import timezoneRoutes from "./timezone.routes";
+import mentorsRoutes from "./mentors.routes";
+import paymentsRoutes from "./payments.routes";
+import reviewsRoutes from "./reviews.routes";
+import { AdminService } from "../services/admin.service";
+import { BookingsService } from "../services/bookings.service";
+import { VerificationService } from "../services/verification.service";
+import { logger } from "../utils/logger";
 
 const router = Router();
 
@@ -28,6 +24,11 @@ AdminService.initialize().catch((err: unknown) => {
 // Initialize bookings tables (async, don't block)
 BookingsService.initialize().catch((err: unknown) => {
   logger.error('Failed to initialize bookings tables:', err);
+});
+
+// Initialize verification tables (async, don't block)
+VerificationService.initialize().catch((err) => {
+  logger.error("Failed to initialize verification tables:", err);
 });
 
 // Initialize notification cleanup service (async, don't block)

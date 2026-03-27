@@ -10,6 +10,7 @@ import {
   paymentWorker,
   escrowReleaseWorker,
   reportWorker,
+  sessionReminderWorker,
   startScheduler,
   stopScheduler,
 } from './workers';
@@ -59,6 +60,7 @@ async function shutdown(signal: string) {
     paymentWorker.close(),
     escrowReleaseWorker.close(),
     reportWorker.close(),
+    sessionReminderWorker.close(),
     stopScheduler(),
   ]);
   server.close(() => {
