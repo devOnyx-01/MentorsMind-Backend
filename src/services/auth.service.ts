@@ -26,7 +26,7 @@ export const AuthService = {
     /**
      * Register a new user
      */
-    async register(input: RegisterInput): Promise<AuthTokens> {
+    async register(input: RegisterInput): Promise<AuthTokens & { userId: string }> {
         const { email, password, firstName, lastName, role } = input;
 
         // Check if email already exists
@@ -47,7 +47,8 @@ export const AuthService = {
         const { rows } = await pool.query(insertQuery, [email, passwordHash, firstName, lastName, role]);
         const user = rows[0];
 
-        return this.generateTokens(user.id, user.role);
+        const tokens = await this.generateTokens(user.id, user.role);
+        return { ...tokens, userId: user.id };
     },
 
     /**
@@ -137,7 +138,7 @@ export const AuthService = {
     /**
      * Reset password via token
      */
-    async resetPassword(input: ResetPasswordInput): Promise<void> {
+    async resetPassword(input: ResetPasswordInput): Promise<string> {
         const resetTokenHash = crypto.createHash('sha256').update(input.token).digest('hex');
 
         const query = `
@@ -158,6 +159,8 @@ export const AuthService = {
             `UPDATE users SET password_hash = $1, reset_token = NULL, reset_token_expires = NULL WHERE id = $2`,
             [passwordHash, userId]
         );
+        
+        return userId;
     },
 
     /**

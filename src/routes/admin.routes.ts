@@ -411,6 +411,120 @@ router.get("/logs", asyncHandler(AdminController.getLogs));
  */
 router.post("/config", asyncHandler(AdminController.updateConfig));
 
+// ── Audit Log Routes ─────────────────────────────────────────────────────────
+
+/**
+ * @swagger
+ * /admin/audit-log:
+ *   get:
+ *     summary: Query audit logs with filtering and pagination
+ *     tags: [Admin, Audit]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: page
+ *         in: query
+ *         schema: { type: integer, default: 1 }
+ *       - name: limit
+ *         in: query
+ *         schema: { type: integer, default: 50 }
+ *       - name: userId
+ *         in: query
+ *         schema: { type: string, format: uuid }
+ *         description: Filter by user ID
+ *       - name: action
+ *         in: query
+ *         schema: { type: string }
+ *         description: Filter by action type
+ *       - name: resourceType
+ *         in: query
+ *         schema: { type: string }
+ *         description: Filter by resource type
+ *       - name: startDate
+ *         in: query
+ *         schema: { type: string, format: date-time }
+ *       - name: endDate
+ *         in: query
+ *         schema: { type: string, format: date-time }
+ *     responses:
+ *       200:
+ *         description: Paginated audit logs
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiResponse'
+ */
+router.get("/audit-log", asyncHandler(AdminController.getAuditLogs));
+
+/**
+ * @swagger
+ * /admin/audit-log/export:
+ *   get:
+ *     summary: Export audit logs as CSV for compliance reporting
+ *     tags: [Admin, Audit]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: userId
+ *         in: query
+ *         schema: { type: string, format: uuid }
+ *       - name: action
+ *         in: query
+ *         schema: { type: string }
+ *       - name: resourceType
+ *         in: query
+ *         schema: { type: string }
+ *       - name: startDate
+ *         in: query
+ *         schema: { type: string, format: date-time }
+ *       - name: endDate
+ *         in: query
+ *         schema: { type: string, format: date-time }
+ *     responses:
+ *       200:
+ *         description: CSV file download
+ *         content:
+ *           text/csv:
+ *             schema:
+ *               type: string
+ */
+router.get("/audit-log/export", asyncHandler(AdminController.exportAuditLogs));
+
+/**
+ * @swagger
+ * /admin/audit-log/verify:
+ *   get:
+ *     summary: Verify audit log chain integrity
+ *     tags: [Admin, Audit]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Chain integrity verification result
+ */
+router.get("/audit-log/verify", asyncHandler(AdminController.verifyAuditLogIntegrity));
+
+/**
+ * @swagger
+ * /admin/audit-log/stats:
+ *   get:
+ *     summary: Get audit log statistics
+ *     tags: [Admin, Audit]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: startDate
+ *         in: query
+ *         schema: { type: string, format: date-time }
+ *       - name: endDate
+ *         in: query
+ *         schema: { type: string, format: date-time }
+ *     responses:
+ *       200:
+ *         description: Audit log statistics
+ */
+router.get("/audit-log/stats", asyncHandler(AdminController.getAuditLogStats));
+
 // ── Analytics Routes ─────────────────────────────────────────────────────────
 
 /**
