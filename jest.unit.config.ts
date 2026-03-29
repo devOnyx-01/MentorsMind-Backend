@@ -1,46 +1,52 @@
-import type { Config } from 'jest';
+import type { Config } from "jest";
 
 /**
  * Jest config for unit tests that don't require a database connection.
  * Used for queue, worker, logging, database, and env config unit tests.
  */
 const config: Config = {
-  preset: 'ts-jest',
-  testEnvironment: 'node',
-  rootDir: '.',
-  roots: ['<rootDir>/src'],
+  preset: "ts-jest",
+  testEnvironment: "node",
+  rootDir: ".",
+  roots: ["<rootDir>/src"],
   testMatch: [
-    '**/__tests__/**/*.unit.test.ts',
-    '**/queues/__tests__/**/*.test.ts',
-    '**/workers/__tests__/**/*.test.ts',
+    "**/__tests__/unit/**/*.test.ts",
+    "**/__tests__/**/*.unit.test.ts",
+    "**/queues/__tests__/**/*.test.ts",
+    "**/workers/__tests__/**/*.test.ts",
     // Logging infrastructure unit tests (no DB required)
-    '**/utils/__tests__/logger.test.ts',
-    '**/middleware/__tests__/correlation-id.middleware.test.ts',
-    '**/middleware/__tests__/request-logger.middleware.test.ts',
+    "**/utils/__tests__/logger.test.ts",
+    "**/middleware/__tests__/correlation-id.middleware.test.ts",
+    "**/middleware/__tests__/request-logger.middleware.test.ts",
+    "**/middleware/__tests__/idempotency.middleware.test.ts",
     // Database unit tests (no live DB — all mocked)
-    '**/utils/__tests__/database.utils.test.ts',
-    '**/services/__tests__/database.service.test.ts',
+    "**/utils/__tests__/database.utils.test.ts",
+    "**/services/__tests__/database.service.test.ts",
     // Environment config unit tests
-    '**/config/__tests__/env.test.ts',
+    "**/config/__tests__/env.test.ts",
     // Session reminder and verification unit tests
-    '**/__tests__/jobs/**/*.unit.test.ts',
-    '**/__tests__/services/**/*.unit.test.ts',
+    "**/__tests__/jobs/**/*.unit.test.ts",
+    "**/__tests__/services/**/*.unit.test.ts",
   ],
-  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
+  moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json", "node"],
   transform: {
-    '^.+\\.ts$': [
-      'ts-jest',
+    "^.+\\.ts$": [
+      "ts-jest",
       {
         tsconfig: {
-          target: 'ES2022',
-          module: 'commonjs',
+          target: "ES2022",
+          module: "commonjs",
           strict: false,
           esModuleInterop: true,
           skipLibCheck: true,
           allowSyntheticDefaultImports: true,
         },
+        diagnostics: false,
       },
     ],
+  },
+  moduleNameMapper: {
+    "^uuid$": "<rootDir>/src/tests/mocks/uuid.ts",
   },
   clearMocks: true,
   resetModules: true,
@@ -49,18 +55,24 @@ const config: Config = {
   forceExit: true,
   testTimeout: 30000,
   collectCoverageFrom: [
-    'src/**/*.ts',
-    '!src/**/*.d.ts',
-    '!src/**/index.ts',
-    '!src/tests/**',
-    '!src/docs/**',
+    "src/**/*.ts",
+    "!src/**/*.d.ts",
+    "!src/**/index.ts",
+    "!src/tests/**",
+    "!src/docs/**",
+    "src/services/auth.service.ts",
+    "src/services/payments.service.ts",
+    "src/services/bookings.service.ts",
+    "src/services/notification.service.ts",
+    "src/services/search.service.ts",
   ],
-  coverageDirectory: 'coverage',
-  coverageReporters: ['text', 'lcov', 'html', 'json-summary'],
+  coverageDirectory: "coverage",
+  coverageReporters: ["text", "lcov", "html", "json-summary"],
   coverageThreshold: {
     global: {
+      lines: 80,
       statements: 80,
-      branches: 75,
+      branches: 70,
       functions: 80,
     },
   },

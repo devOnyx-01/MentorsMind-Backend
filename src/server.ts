@@ -1,3 +1,22 @@
+// Sentry must be initialised before any other imports so it can instrument them
+import * as Sentry from "@sentry/node";
+import { nodeProfilingIntegration } from "@sentry/profiling-node";
+
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  environment: process.env.NODE_ENV || "development",
+  enabled: !!process.env.SENTRY_DSN,
+  integrations: [nodeProfilingIntegration()],
+  tracesSampleRate: process.env.NODE_ENV === "production" ? 0.2 : 1.0,
+  profilesSampleRate: 1.0,
+  // Only capture server errors — ignore expected client/auth errors
+  beforeSend(event) {
+    const status = event.contexts?.response?.status_code as number | undefined;
+    if (status && status < 500) return null;
+    return event;
+  },
+});
+
 // Config must be imported first — validates env vars before anything else loads
 import config from "./config";
 import app from "./app";
@@ -17,16 +36,19 @@ import {
   stellarTxWorker,
   escrowCheckWorker,
   notificationsWorker,
+  notificationCleanupWorker,
   startScheduler,
   stopScheduler,
 } from "./workers";
 import { initializeEmailTemplates } from "./services/template-initializer.service";
+import { logger } from "./utils/logger";
 import { logger } from "./utils/logger.utils";
 
 // Initialize database tables, then seed email templates
 initializeModels()
   .then(() => initializeEmailTemplates())
   .catch((err) => {
+    logger.error({ err }, "Failed to initialize models");
     console.error("Failed to initialize models:", err);
   });
 
@@ -59,7 +81,7 @@ startStellarStream();
 
 // Graceful shutdown
 async function shutdown(signal: string) {
-  console.log(`${signal} signal received: closing HTTP server`);
+  logger.info({ signal }, "Signal received: closing HTTP server");
   stopStellarStream();
   await Promise.all([
     emailWorker.close(),
@@ -70,6 +92,7 @@ async function shutdown(signal: string) {
     stellarTxWorker.close(),
     escrowCheckWorker.close(),
     notificationsWorker.close(),
+    notificationCleanupWorker.close(),
     stopScheduler(),
   ]);
   server.close(() => {

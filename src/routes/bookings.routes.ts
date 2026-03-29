@@ -1,7 +1,8 @@
-import { Router } from 'express';
-import { BookingsController } from '../controllers/bookings.controller';
-import { authenticate } from '../middleware/auth.middleware';
-import { requireRole } from '../middleware/rbac.middleware';
+import { Router } from "express";
+import { BookingsController } from "../controllers/bookings.controller";
+import { authenticate } from "../middleware/auth.middleware";
+import { requireRole } from "../middleware/rbac.middleware";
+import { idempotency } from "../middleware/idempotency.middleware";
 
 const router = Router();
 
@@ -11,6 +12,26 @@ const router = Router();
  *   name: Bookings
  *   description: Session booking and meeting room management endpoints
  */
+
+/**
+ * @swagger
+ * /api/v1/bookings:
+ *   post:
+ *     summary: Create a new booking
+ *     tags: [Bookings]
+ *     security:
+ *       - bearerAuth: true
+ *     parameters:
+ *       - in: header
+ *         name: Idempotency-Key
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *         description: Unique key to prevent duplicate bookings
+ *     responses:
+ *       201:
+ *         description: Booking created
+ */
+router.post("/", authenticate, idempotency, BookingsController.createBooking);
 
 /**
  * @swagger
@@ -45,7 +66,7 @@ const router = Router();
  *                       items:
  *                         $ref: '#/components/schemas/Session'
  */
-router.get('/', authenticate, BookingsController.listBookings);
+router.get("/", authenticate, BookingsController.listBookings);
 
 /**
  * @swagger
@@ -74,7 +95,12 @@ router.get('/', authenticate, BookingsController.listBookings);
  *                       items:
  *                         $ref: '#/components/schemas/Session'
  */
-router.get('/manual-intervention', authenticate, requireRole('admin'), BookingsController.getManualInterventionSessions);
+router.get(
+  "/manual-intervention",
+  authenticate,
+  requireRole("admin"),
+  BookingsController.getManualInterventionSessions,
+);
 
 /**
  * @swagger
@@ -109,7 +135,7 @@ router.get('/manual-intervention', authenticate, requireRole('admin'), BookingsC
  *                     session:
  *                       $ref: '#/components/schemas/Session'
  */
-router.get('/:id', authenticate, BookingsController.getSession);
+router.get("/:id", authenticate, BookingsController.getSession);
 
 /**
  * @swagger
@@ -135,7 +161,7 @@ router.get('/:id', authenticate, BookingsController.getSession);
  *       404:
  *         description: Session not found
  */
-router.delete('/:id/cancel', authenticate, BookingsController.cancelBooking);
+router.delete("/:id/cancel", authenticate, BookingsController.cancelBooking);
 
 /**
  * @swagger
@@ -194,6 +220,6 @@ router.delete('/:id/cancel', authenticate, BookingsController.cancelBooking);
  *                       type: string
  *                       example: Meeting room creation failed. Manual intervention required.
  */
-router.post('/:id/confirm', authenticate, BookingsController.confirmBooking);
+router.post("/:id/confirm", authenticate, BookingsController.confirmBooking);
 
 export default router;

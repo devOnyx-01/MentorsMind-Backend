@@ -1,6 +1,7 @@
 import * as admin from 'firebase-admin';
 import { PushTokensModel } from '../models/push-tokens.model';
-import { NotificationPreferencesModel } from '../models/notification-preferences.model';
+import { UsersService } from './users.service';
+import { NotificationChannel } from '../models/notifications.model';
 import { logger } from '../utils/logger';
 import { env } from '../config/env';
 
@@ -82,10 +83,15 @@ export const PushService = {
       }
 
       // Check user notification preferences
-      const preferences = await NotificationPreferencesModel.getByUserId(userId);
-      if (preferences && !preferences.push_enabled) {
-        result.errors.push('User has disabled push notifications');
-        return result;
+      const user = await UsersService.findById(userId);
+      const preferences = user?.notification_preferences;
+      
+      if (preferences) {
+        const type = data?.type;
+        if (type && preferences[type] && preferences[type][NotificationChannel.PUSH] === false) {
+          result.errors.push(`User has disabled push notifications for type: ${type}`);
+          return result;
+        }
       }
 
       // Get all active tokens for the user

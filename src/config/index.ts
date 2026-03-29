@@ -1,11 +1,11 @@
-import { env } from './env';
-import monitoringConfig from './monitoring.config';
+import { env } from "./env";
+import monitoringConfig from "./monitoring.config";
 
 const config = {
   env: env.NODE_ENV,
-  isProduction: env.NODE_ENV === 'production',
-  isTest: env.NODE_ENV === 'test',
-  isDevelopment: env.NODE_ENV === 'development',
+  isProduction: env.NODE_ENV === "production",
+  isTest: env.NODE_ENV === "test",
+  isDevelopment: env.NODE_ENV === "development",
 
   server: {
     port: parseInt(env.PORT, 10),
@@ -29,6 +29,8 @@ const config = {
     expiresIn: env.JWT_EXPIRES_IN,
     refreshSecret: env.JWT_REFRESH_SECRET,
     refreshExpiresIn: env.JWT_REFRESH_EXPIRES_IN,
+    /** Previous secret — accepted during rotation window. */
+    previousSecret: env.JWT_SECRET_PREVIOUS,
   },
 
   stellar: {
@@ -38,7 +40,7 @@ const config = {
   },
 
   cors: {
-    origins: env.CORS_ORIGIN.split(',').map((o: string) => o.trim()),
+    origins: env.CORS_ORIGIN.split(",").map((o: string) => o.trim()),
   },
 
   rateLimit: {
@@ -50,7 +52,7 @@ const config = {
     smtp: {
       host: env.SMTP_HOST,
       port: parseInt(env.SMTP_PORT, 10),
-      secure: env.SMTP_SECURE === 'true',
+      secure: env.SMTP_SECURE === "true",
       user: env.SMTP_USER,
       pass: env.SMTP_PASS,
     },
@@ -82,4 +84,3 @@ const config = {
 
 export default config;
 export type Config = typeof config;
-

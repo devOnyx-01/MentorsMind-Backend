@@ -9,6 +9,8 @@ import timezoneRoutes from "./timezone.routes";
 import mentorsRoutes from "./mentors.routes";
 import paymentsRoutes from "./payments.routes";
 import reviewsRoutes from "./reviews.routes";
+import conversationsRoutes from "./conversations.routes";
+import messageSearchRoutes from "./messageSearch.routes";
 import { AdminService } from "../services/admin.service";
 import { BookingsService } from "../services/bookings.service";
 import { VerificationService } from "../services/verification.service";
@@ -54,6 +56,8 @@ router.use("/timezones", timezoneRoutes);
 router.use("/mentors", mentorsRoutes);
 router.use("/payments", paymentsRoutes);
 router.use("/reviews", reviewsRoutes);
+router.use("/conversations", conversationsRoutes);
+router.use("/messages", messageSearchRoutes);
 
 // ── Root info ────────────────────────────────────────────────────────────────
 /**

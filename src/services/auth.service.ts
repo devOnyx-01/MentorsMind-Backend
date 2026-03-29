@@ -40,12 +40,30 @@ export const AuthService = {
         const salt = await bcrypt.genSalt(10);
         const passwordHash = await bcrypt.hash(password, salt);
 
+        const defaultPreferences = {
+            booking_confirmed: { email: true, push: true, in_app: true },
+            payment_processed: { email: true, push: true, in_app: true },
+            session_reminder: { email: true, push: true, in_app: true },
+            dispute_created: { email: true, push: true, in_app: true },
+            system_alert: { email: true, push: true, in_app: true },
+            meeting_confirmed: { email: true, push: true, in_app: true },
+            message_received: { email: true, push: true, in_app: true },
+            session_cancelled: { email: true, push: true, in_app: true },
+        };
+
         const insertQuery = `
-      INSERT INTO users (email, password_hash, first_name, last_name, role)
-      VALUES ($1, $2, $3, $4, $5)
+      INSERT INTO users (email, password_hash, first_name, last_name, role, notification_preferences)
+      VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING id, role
     `;
-        const { rows } = await pool.query(insertQuery, [email, passwordHash, firstName, lastName, role]);
+        const { rows } = await pool.query(insertQuery, [
+            email,
+            passwordHash,
+            firstName,
+            lastName,
+            role,
+            JSON.stringify(defaultPreferences),
+        ]);
         const user = rows[0];
 
         const tokens = await this.generateTokens(user.id, user.role);

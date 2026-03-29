@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { NotificationsController } from '../controllers/notifications.controller';
+import { NotificationPreferencesController } from '../controllers/notificationPreferences.controller';
 import { PushController } from '../controllers/push.controller';
 import { authenticate } from '../middleware/auth.middleware';
 
@@ -170,6 +171,53 @@ router.put('/:id/read', authenticate, NotificationsController.markAsRead);
  *         description: Notification not found
  */
 router.delete('/:id', authenticate, NotificationsController.deleteNotification);
+
+/**
+ * @swagger
+ * /api/v1/notifications/preferences:
+ *   get:
+ *     summary: Get user's current notification preferences
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Notification preferences
+ *   put:
+ *     summary: Update notification preferences
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               preferences:
+ *                 type: object
+ *                 description: Preference matrix (type x channel)
+ *     responses:
+ *       200:
+ *         description: Preferences updated successfully
+ */
+router.get('/preferences', authenticate, NotificationPreferencesController.getPreferences);
+router.put('/preferences', authenticate, NotificationPreferencesController.updatePreferences);
+
+/**
+ * @swagger
+ * /api/v1/notifications/preferences/reset:
+ *   post:
+ *     summary: Reset notification preferences to defaults
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Preferences reset successfully
+ */
+router.post('/preferences/reset', authenticate, NotificationPreferencesController.resetPreferences);
 
 /**
  * @swagger
