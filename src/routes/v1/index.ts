@@ -21,6 +21,7 @@ import timezoneRoutes from "../timezone.routes";
 import analyticsRoutes from "../analytics.routes";
 import disputesRoutes from "../disputes.routes";
 import escrowRoutes from "../escrow.routes";
+import walletRoutes from "../wallets.routes";
 import consentRoutes from "../consent.routes";
 import { AdminService } from "../../services/admin.service";
 import { BookingsService } from "../../services/bookings.service";
@@ -36,10 +37,10 @@ BookingsService.initialize().catch((err) => {
   logger.error("Failed to initialize bookings tables:", err);
 });
 VerificationService.initialize().catch((err: unknown) => {
-  logger.error('Failed to initialize verification tables:', err);
+  logger.error("Failed to initialize verification tables:", err);
 });
 notificationCleanupService.initialize().catch((err: unknown) => {
-  logger.error('Failed to initialize notification cleanup service:', err);
+  logger.error("Failed to initialize notification cleanup service:", err);
 });
 
 router.use("/auth", authRoutes);
@@ -52,5 +53,6 @@ router.use("/timezones", timezoneRoutes);
 router.use("/analytics", analyticsRoutes);
 router.use("/disputes", disputesRoutes);
 router.use("/escrow", escrowRoutes);
+router.use("/wallets", walletRoutes);
 
 export default router;

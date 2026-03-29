@@ -1,7 +1,7 @@
-import * as StellarSdk from '@stellar/stellar-sdk';
-import { env } from './env';
-import config from './index';
-import { logger } from '../utils/logger';
+import * as StellarSdk from "@stellar/stellar-sdk";
+import { env } from "./env";
+import config from "./index";
+import { logger } from "../utils/logger";
 
 /**
  * Stellar Network Configuration
@@ -27,16 +27,16 @@ import { logger } from '../utils/logger';
 
 const HORIZON_URLS: Record<string, { primary: string; backup: string }> = {
   testnet: {
-    primary: 'https://horizon-testnet.stellar.org',
-    backup: 'https://horizon-testnet.stellar.org', // only one public testnet
+    primary: "https://horizon-testnet.stellar.org",
+    backup: "https://horizon-testnet.stellar.org", // only one public testnet
   },
   mainnet: {
-    primary: 'https://horizon.stellar.org',
-    backup: 'https://horizon.stellar.org',
+    primary: "https://horizon.stellar.org",
+    backup: "https://horizon.stellar.org",
   },
 };
 
-const networkKey = config.stellar.network === 'mainnet' ? 'mainnet' : 'testnet';
+const networkKey = config.stellar.network === "mainnet" ? "mainnet" : "testnet";
 
 export const horizonUrls = {
   primary: config.stellar.horizonUrl || HORIZON_URLS[networkKey].primary,
@@ -47,7 +47,7 @@ export const server = new StellarSdk.Horizon.Server(horizonUrls.primary);
 export const backupServer = new StellarSdk.Horizon.Server(horizonUrls.backup);
 
 export const networkPassphrase =
-  config.stellar.network === 'testnet'
+  config.stellar.network === "testnet"
     ? StellarSdk.Networks.TESTNET
     : StellarSdk.Networks.PUBLIC;
 
@@ -57,9 +57,9 @@ export const networkPassphrase =
 
 // Secret key is read directly from env — never stored in the config object
 export const getPlatformKeypair = (): StellarSdk.Keypair | null => {
-  const secretKey = env.PLATFORM_SECRET_KEY;
+  const secretKey = env.STELLAR_FUNDING_SECRET;
   if (!secretKey) {
-    logger.warn('Platform secret key not configured');
+    logger.warn("Platform secret key not configured");
     return null;
   }
   return StellarSdk.Keypair.fromSecret(secretKey);
@@ -75,7 +75,9 @@ export const testStellarConnection = async (): Promise<boolean> => {
     logger.info(`Stellar ${config.stellar.network} connected successfully`);
     return true;
   } catch (error) {
-    logger.error('Stellar connection failed', { error: error instanceof Error ? error.message : error });
+    logger.error("Stellar connection failed", {
+      error: error instanceof Error ? error.message : error,
+    });
     return false;
   }
 };
