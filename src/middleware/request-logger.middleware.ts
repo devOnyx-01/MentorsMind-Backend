@@ -1,56 +1,40 @@
-import { Request, Response, NextFunction } from 'express';
-import { logger } from '../utils/logger';
+import pinoHttp from "pino-http";
+import type { Response } from "express";
+import { logger } from "../utils/logger";
 
 /**
- * Request / response logger middleware.
+ * pino-http request logger middleware.
  *
- * Logs every incoming request and, on `res.finish`, the outgoing response
- * with status code and duration.  All log entries include the correlation ID
- * when present on the request object.
+ * Every log line includes: timestamp, level, requestId, userId (if set on
+ * res.locals by auth middleware), method, path, statusCode, responseTime.
  *
- * Log level selection:
+ * Log levels:
  *   5xx → error
  *   4xx → warn
- *   everything else → info
+ *   2xx/3xx → info
  */
-export const requestLoggerMiddleware = (
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): void => {
-  const startTime = Date.now();
-  const { method, originalUrl, ip } = req;
-  const correlationId = req.correlationId;
-  const userAgent = req.get('user-agent');
-
-  logger.info('Incoming request', {
-    correlationId,
-    method,
-    url: originalUrl,
-    ip,
-    userAgent,
-  });
-
-  res.on('finish', () => {
-    const durationMs = Date.now() - startTime;
-    const { statusCode } = res;
-
-    const logMeta = {
-      correlationId,
-      method,
-      url: originalUrl,
-      statusCode,
-      durationMs,
-    };
-
-    if (statusCode >= 500) {
-      logger.error('Request completed with server error', logMeta);
-    } else if (statusCode >= 400) {
-      logger.warn('Request completed with client error', logMeta);
-    } else {
-      logger.info('Request completed', logMeta);
-    }
-  });
-
-  next();
-};
+export const requestLoggerMiddleware = pinoHttp({
+  logger,
+  // Attach requestId and userId to every log line
+  genReqId: (_req, res) => (res as unknown as Response).locals?.requestId,
+  customProps: (_req, res) => ({
+    requestId: (res as unknown as Response).locals?.requestId,
+    userId: (res as unknown as Response).locals?.userId ?? undefined,
+  }),
+  customLogLevel: (_req, res, err) => {
+    if (err || res.statusCode >= 500) return "error";
+    if (res.statusCode >= 400) return "warn";
+    return "info";
+  },
+  serializers: {
+    req: (req) => ({
+      method: req.method,
+      path: req.url,
+    }),
+    res: (res) => ({
+      statusCode: res.statusCode,
+    }),
+  },
+  // Never log sensitive headers
+  redact: ["req.headers.authorization", "req.headers.cookie"],
+});

@@ -38,12 +38,14 @@ import {
   stopScheduler,
 } from "./workers";
 import { initializeEmailTemplates } from "./services/template-initializer.service";
+import { logger } from "./utils/logger";
 import { logger } from "./utils/logger.utils";
 
 // Initialize database tables, then seed email templates
 initializeModels()
   .then(() => initializeEmailTemplates())
   .catch((err) => {
+    logger.error({ err }, "Failed to initialize models");
     console.error("Failed to initialize models:", err);
   });
 
@@ -76,7 +78,7 @@ startStellarStream();
 
 // Graceful shutdown
 async function shutdown(signal: string) {
-  console.log(`${signal} signal received: closing HTTP server`);
+  logger.info({ signal }, "Signal received: closing HTTP server");
   stopStellarStream();
   await Promise.all([
     emailWorker.close(),

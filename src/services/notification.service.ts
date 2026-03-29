@@ -1,11 +1,21 @@
-import { NotificationsModel, NotificationInput, NotificationType, NotificationChannel, NotificationPriority } from '../models/notifications.model';
-import { NotificationPreferencesModel } from '../models/notification-preferences.model';
-import { NotificationDeliveryTrackingModel, DeliveryStatus } from '../models/notification-delivery-tracking.model';
-import { NotificationAnalyticsModel } from '../models/notification-analytics.model';
-import { enqueueEmail } from '../queues/email.queue';
-import { SocketService } from './socket.service';
-import { PushService } from './push.service';
-import { logger } from '../utils/logger';
+import {
+  NotificationsModel,
+  NotificationInput,
+  NotificationType,
+  NotificationChannel,
+  NotificationPriority,
+} from "../models/notifications.model";
+import { NotificationPreferencesModel } from "../models/notification-preferences.model";
+import {
+  NotificationDeliveryTrackingModel,
+  DeliveryStatus,
+} from "../models/notification-delivery-tracking.model";
+import { NotificationAnalyticsModel } from "../models/notification-analytics.model";
+import { enqueueEmail } from "../queues/email.queue";
+import { logger } from "../utils/logger";
+import { SocketService } from "./socket.service";
+import { PushService } from "./push.service";
+import { logger } from "../utils/logger";
 
 export interface NotificationRecord {
   id: string;
@@ -84,7 +94,9 @@ export const NotificationService = {
   /**
    * Send notification through multiple channels based on request
    */
-  async sendNotification(request: NotificationRequest): Promise<NotificationResult> {
+  async sendNotification(
+    request: NotificationRequest,
+  ): Promise<NotificationResult> {
     const result: NotificationResult = {
       success: true,
       notificationIds: [],
@@ -94,7 +106,11 @@ export const NotificationService = {
     try {
       // Get user preferences to filter channels
       const preferences = await this.getUserPreferences(request.userId);
-      const allowedChannels = this.filterChannelsByPreferences(request.channels, preferences, request.type);
+      const allowedChannels = this.filterChannelsByPreferences(
+        request.channels,
+        preferences,
+        request.type,
+      );
 
       // Create notifications for each allowed channel
       for (const channel of allowedChannels) {
@@ -115,19 +131,23 @@ export const NotificationService = {
 
           if (notification) {
             result.notificationIds.push(notification.id);
-            
+
             // Track delivery attempt
             await NotificationDeliveryTrackingModel.create({
               notification_id: notification.id,
-              status: request.scheduledAt ? DeliveryStatus.QUEUED : DeliveryStatus.PROCESSING,
+              status: request.scheduledAt
+                ? DeliveryStatus.QUEUED
+                : DeliveryStatus.PROCESSING,
               channel,
             });
 
             // Update analytics
-            await this.updateAnalytics(request.type, channel, 'sent');
+            await this.updateAnalytics(request.type, channel, "sent");
           }
         } catch (error) {
-          result.errors.push(`Failed to create ${channel} notification: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          result.errors.push(
+            `Failed to create ${channel} notification: ${error instanceof Error ? error.message : "Unknown error"}`,
+          );
           result.success = false;
         }
       }
@@ -135,7 +155,9 @@ export const NotificationService = {
       return result;
     } catch (error) {
       result.success = false;
-      result.errors.push(`Failed to send notification: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      result.errors.push(
+        `Failed to send notification: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
       return result;
     }
   },
@@ -143,13 +165,15 @@ export const NotificationService = {
   /**
    * Create a notification record in the database
    */
-  async createNotification(input: NotificationInput): Promise<NotificationRecord | null> {
+  async createNotification(
+    input: NotificationInput,
+  ): Promise<NotificationRecord | null> {
     const notification = await NotificationsModel.create(input);
 
     if (notification) {
       // Emit notification:new event to the user via WebSocket
       try {
-        SocketService.emitToUser(notification.user_id, 'notification:new', {
+        SocketService.emitToUser(notification.user_id, "notification:new", {
           notificationId: notification.id,
           type: notification.type,
           title: notification.title,
@@ -158,7 +182,10 @@ export const NotificationService = {
           createdAt: notification.created_at,
         });
       } catch (error) {
-        logger.error('Failed to emit notification:new event', { error, notificationId: notification.id });
+        logger.error("Failed to emit notification:new event", {
+          error,
+          notificationId: notification.id,
+        });
       }
 
       // Send push notification if channel is PUSH
@@ -168,12 +195,20 @@ export const NotificationService = {
             notification.user_id,
             notification.title,
             notification.message,
-            notification.data ? Object.fromEntries(
-              Object.entries(notification.data).map(([k, v]) => [k, String(v)])
-            ) : undefined
+            notification.data
+              ? Object.fromEntries(
+                  Object.entries(notification.data).map(([k, v]) => [
+                    k,
+                    String(v),
+                  ]),
+                )
+              : undefined,
           );
         } catch (error) {
-          logger.error('Failed to send push notification', { error, notificationId: notification.id });
+          logger.error("Failed to send push notification", {
+            error,
+            notificationId: notification.id,
+          });
         }
       }
     }
@@ -190,7 +225,7 @@ export const NotificationService = {
   async create(
     userId: string,
     type: string,
-    payload: { title: string; message: string; data?: Record<string, any> }
+    payload: { title: string; message: string; data?: Record<string, any> },
   ): Promise<NotificationRecord | null> {
     return this.createNotification({
       user_id: userId,
@@ -211,7 +246,7 @@ export const NotificationService = {
     type: string,
     title: string,
     message: string,
-    data: Record<string, unknown> = {}
+    data: Record<string, unknown> = {},
   ): Promise<NotificationRecord> {
     const notification = await this.createNotification({
       user_id: userId,
@@ -224,7 +259,7 @@ export const NotificationService = {
     });
 
     if (!notification) {
-      throw new Error('Failed to create in-app notification');
+      throw new Error("Failed to create in-app notification");
     }
 
     return notification;
@@ -238,12 +273,13 @@ export const NotificationService = {
       await enqueueEmail({
         to: [notification.to],
         subject: notification.subject,
-        htmlContent: notification.html || notification.body.replace(/\n/g, '<br>'),
+        htmlContent:
+          notification.html || notification.body.replace(/\n/g, "<br>"),
         textContent: notification.body,
       });
       return true;
     } catch (error) {
-      console.error('Failed to enqueue email:', error);
+      logger.error({ err: error }, "Failed to enqueue email");
       return false;
     }
   },
@@ -261,24 +297,24 @@ export const NotificationService = {
     meetingUrl: string,
     scheduledAt: Date,
     durationMinutes: number,
-    expiresAt: Date
+    expiresAt: Date,
   ): Promise<void> {
-    const sessionTime = scheduledAt.toLocaleString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
+    const sessionTime = scheduledAt.toLocaleString("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
     });
 
-    const expiryTime = expiresAt.toLocaleString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
+    const expiryTime = expiresAt.toLocaleString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
     });
 
     // Email content
-    const emailSubject = 'Your MentorMinds Session Meeting Link';
+    const emailSubject = "Your MentorMinds Session Meeting Link";
     const emailBody = `
 Hello {NAME},
 
@@ -323,13 +359,13 @@ The MentorMinds Team
       this.sendEmail({
         to: mentorEmail,
         subject: emailSubject,
-        body: emailBody.replace('{NAME}', mentorName),
+        body: emailBody.replace("{NAME}", mentorName),
         html: htmlBody,
       }),
       this.sendEmail({
         to: menteeEmail,
         subject: emailSubject,
-        body: emailBody.replace('{NAME}', menteeName),
+        body: emailBody.replace("{NAME}", menteeName),
         html: htmlBody,
       }),
     ]);
@@ -338,17 +374,17 @@ The MentorMinds Team
     await Promise.all([
       this.createInAppNotification(
         mentorId,
-        'meeting_confirmed',
-        'Session Meeting Link Available',
+        "meeting_confirmed",
+        "Session Meeting Link Available",
         `Your meeting with ${menteeName} has been scheduled. Join link: ${meetingUrl}`,
-        { meetingUrl, scheduledAt, expiresAt }
+        { meetingUrl, scheduledAt, expiresAt },
       ),
       this.createInAppNotification(
         menteeId,
-        'meeting_confirmed',
-        'Session Meeting Link Available',
+        "meeting_confirmed",
+        "Session Meeting Link Available",
         `Your meeting with ${mentorName} has been scheduled. Join link: ${meetingUrl}`,
-        { meetingUrl, scheduledAt, expiresAt }
+        { meetingUrl, scheduledAt, expiresAt },
       ),
     ]);
   },
@@ -367,7 +403,7 @@ The MentorMinds Team
   filterChannelsByPreferences(
     requestedChannels: NotificationChannel[],
     preferences: any,
-    notificationType: string
+    notificationType: string,
   ): NotificationChannel[] {
     const allowedChannels: NotificationChannel[] = [];
 
@@ -376,7 +412,10 @@ The MentorMinds Team
       if (channel === NotificationChannel.EMAIL && !preferences.email_enabled) {
         continue;
       }
-      if (channel === NotificationChannel.IN_APP && !preferences.in_app_enabled) {
+      if (
+        channel === NotificationChannel.IN_APP &&
+        !preferences.in_app_enabled
+      ) {
         continue;
       }
       if (channel === NotificationChannel.PUSH && !preferences.push_enabled) {
@@ -386,7 +425,7 @@ The MentorMinds Team
       // Check specific notification type preferences
       const typePrefs = preferences.preferences?.[notificationType];
       if (typePrefs) {
-        const channelKey = channel.replace('_', '');
+        const channelKey = channel.replace("_", "");
         if (typePrefs[channelKey] === false) {
           continue;
         }
@@ -403,16 +442,16 @@ The MentorMinds Team
    */
   getDefaultTitle(type: string): string {
     const titles: Record<string, string> = {
-      [NotificationType.BOOKING_CONFIRMED]: 'Booking Confirmed',
-      [NotificationType.PAYMENT_PROCESSED]: 'Payment Processed',
-      [NotificationType.SESSION_REMINDER]: 'Session Reminder',
-      [NotificationType.DISPUTE_CREATED]: 'Dispute Created',
-      [NotificationType.SYSTEM_ALERT]: 'System Alert',
-      [NotificationType.MEETING_CONFIRMED]: 'Meeting Confirmed',
-      [NotificationType.MESSAGE_RECEIVED]: 'New Message',
-      [NotificationType.SESSION_CANCELLED]: 'Session Cancelled',
+      [NotificationType.BOOKING_CONFIRMED]: "Booking Confirmed",
+      [NotificationType.PAYMENT_PROCESSED]: "Payment Processed",
+      [NotificationType.SESSION_REMINDER]: "Session Reminder",
+      [NotificationType.DISPUTE_CREATED]: "Dispute Created",
+      [NotificationType.SYSTEM_ALERT]: "System Alert",
+      [NotificationType.MEETING_CONFIRMED]: "Meeting Confirmed",
+      [NotificationType.MESSAGE_RECEIVED]: "New Message",
+      [NotificationType.SESSION_CANCELLED]: "Session Cancelled",
     };
-    return titles[type] || 'Notification';
+    return titles[type] || "Notification";
   },
 
   /**
@@ -420,44 +459,60 @@ The MentorMinds Team
    */
   getDefaultMessage(type: string): string {
     const messages: Record<string, string> = {
-      [NotificationType.BOOKING_CONFIRMED]: 'Your booking has been confirmed.',
-      [NotificationType.PAYMENT_PROCESSED]: 'Your payment has been processed successfully.',
-      [NotificationType.SESSION_REMINDER]: 'You have an upcoming session.',
-      [NotificationType.DISPUTE_CREATED]: 'A dispute has been created.',
-      [NotificationType.SYSTEM_ALERT]: 'System notification.',
-      [NotificationType.MEETING_CONFIRMED]: 'Your meeting has been confirmed.',
-      [NotificationType.MESSAGE_RECEIVED]: 'You have received a new message.',
-      [NotificationType.SESSION_CANCELLED]: 'Your session has been cancelled.',
+      [NotificationType.BOOKING_CONFIRMED]: "Your booking has been confirmed.",
+      [NotificationType.PAYMENT_PROCESSED]:
+        "Your payment has been processed successfully.",
+      [NotificationType.SESSION_REMINDER]: "You have an upcoming session.",
+      [NotificationType.DISPUTE_CREATED]: "A dispute has been created.",
+      [NotificationType.SYSTEM_ALERT]: "System notification.",
+      [NotificationType.MEETING_CONFIRMED]: "Your meeting has been confirmed.",
+      [NotificationType.MESSAGE_RECEIVED]: "You have received a new message.",
+      [NotificationType.SESSION_CANCELLED]: "Your session has been cancelled.",
     };
-    return messages[type] || 'You have a new notification.';
+    return messages[type] || "You have a new notification.";
   },
 
   /**
    * Update analytics for notification events
    */
-  async updateAnalytics(type: string, channel: string, metric: 'sent' | 'delivered' | 'failed' | 'opened' | 'clicked'): Promise<void> {
+  async updateAnalytics(
+    type: string,
+    channel: string,
+    metric: "sent" | "delivered" | "failed" | "opened" | "clicked",
+  ): Promise<void> {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     try {
-      await NotificationAnalyticsModel.incrementMetric(today, type, channel, metric);
+      await NotificationAnalyticsModel.incrementMetric(
+        today,
+        type,
+        channel,
+        metric,
+      );
     } catch (error) {
-      logger.error('Failed to update notification analytics', { error });
+      logger.error("Failed to update notification analytics", { error });
     }
   },
 
   /**
    * Get notification status with delivery history
    */
-  async getNotificationStatus(notificationId: string): Promise<NotificationStatus | null> {
+  async getNotificationStatus(
+    notificationId: string,
+  ): Promise<NotificationStatus | null> {
     try {
       const notification = await NotificationsModel.getById(notificationId);
       if (!notification) {
         return null;
       }
 
-      const deliveryHistory = await NotificationDeliveryTrackingModel.getByNotificationId(notificationId);
-      const latestStatus = await NotificationDeliveryTrackingModel.getLatestStatus(notificationId);
+      const deliveryHistory =
+        await NotificationDeliveryTrackingModel.getByNotificationId(
+          notificationId,
+        );
+      const latestStatus =
+        await NotificationDeliveryTrackingModel.getLatestStatus(notificationId);
 
       return {
         id: notification.id,
@@ -467,7 +522,7 @@ The MentorMinds Team
         deliveryHistory,
       };
     } catch (error) {
-      logger.error('Failed to get notification status', { error });
+      logger.error("Failed to get notification status", { error });
       return null;
     }
   },
@@ -475,7 +530,9 @@ The MentorMinds Team
   /**
    * Schedule a notification for future delivery
    */
-  async scheduleNotification(request: NotificationRequest & { scheduledAt: Date }): Promise<string | null> {
+  async scheduleNotification(
+    request: NotificationRequest & { scheduledAt: Date },
+  ): Promise<string | null> {
     try {
       const result = await this.sendNotification({
         ...request,
@@ -488,7 +545,7 @@ The MentorMinds Team
 
       return null;
     } catch (error) {
-      logger.error('Failed to schedule notification', { error });
+      logger.error("Failed to schedule notification", { error });
       return null;
     }
   },
@@ -500,7 +557,7 @@ The MentorMinds Team
     try {
       return await NotificationsModel.delete(notificationId);
     } catch (error) {
-      logger.error('Failed to cancel scheduled notification', { error });
+      logger.error("Failed to cancel scheduled notification", { error });
       return false;
     }
   },
@@ -523,11 +580,15 @@ The MentorMinds Team
       });
 
       // Update analytics
-      await this.updateAnalytics(notification.type, notification.channel, 'sent');
+      await this.updateAnalytics(
+        notification.type,
+        notification.channel,
+        "sent",
+      );
 
       return true;
     } catch (error) {
-      logger.error('Failed to retry notification', { error });
+      logger.error("Failed to retry notification", { error });
       return false;
     }
   },
@@ -564,7 +625,7 @@ The MentorMinds Team
       isRead?: boolean;
       limit?: number;
       offset?: number;
-    } = {}
+    } = {},
   ): Promise<NotificationRecord[]> {
     return await NotificationsModel.getByUserId(userId, options);
   },
@@ -572,14 +633,18 @@ The MentorMinds Team
   /**
    * Get notification counts for a user
    */
-  async getNotificationCounts(userId: string): Promise<{ total: number; unread: number; read: number }> {
+  async getNotificationCounts(
+    userId: string,
+  ): Promise<{ total: number; unread: number; read: number }> {
     return await NotificationsModel.getCountsByUserId(userId);
   },
 
   /**
    * Send batch notifications with processing options
    */
-  async sendBatchNotifications(batchRequest: BatchNotificationRequest): Promise<BatchNotificationResult> {
+  async sendBatchNotifications(
+    batchRequest: BatchNotificationRequest,
+  ): Promise<BatchNotificationResult> {
     const result: BatchNotificationResult = {
       success: true,
       totalProcessed: 0,
@@ -597,24 +662,28 @@ The MentorMinds Team
       // Process notifications in batches
       for (let i = 0; i < requests.length; i += maxBatchSize) {
         const batch = requests.slice(i, i + maxBatchSize);
-        
+
         // Add delay between batches if specified
         if (i > 0 && delayBetweenBatches > 0) {
-          await new Promise(resolve => setTimeout(resolve, delayBetweenBatches));
+          await new Promise((resolve) =>
+            setTimeout(resolve, delayBetweenBatches),
+          );
         }
 
         // Process batch
-        const batchPromises = batch.map(request => this.sendNotification(request));
+        const batchPromises = batch.map((request) =>
+          this.sendNotification(request),
+        );
         const batchResults = await Promise.allSettled(batchPromises);
 
         // Process results
         for (const batchResult of batchResults) {
           result.totalProcessed++;
-          
-          if (batchResult.status === 'fulfilled') {
+
+          if (batchResult.status === "fulfilled") {
             const notificationResult = batchResult.value;
             result.results.push(notificationResult);
-            
+
             if (notificationResult.success) {
               result.successCount++;
             } else {
@@ -623,7 +692,9 @@ The MentorMinds Team
             }
           } else {
             result.failureCount++;
-            result.errors.push(`Batch processing failed: ${batchResult.reason}`);
+            result.errors.push(
+              `Batch processing failed: ${batchResult.reason}`,
+            );
           }
         }
       }
@@ -632,7 +703,9 @@ The MentorMinds Team
       return result;
     } catch (error) {
       result.success = false;
-      result.errors.push(`Batch processing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      result.errors.push(
+        `Batch processing failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
       return result;
     }
   },
@@ -640,20 +713,23 @@ The MentorMinds Team
   /**
    * Validate notification request
    */
-  validateNotificationRequest(request: NotificationRequest): { isValid: boolean; errors: string[] } {
+  validateNotificationRequest(request: NotificationRequest): {
+    isValid: boolean;
+    errors: string[];
+  } {
     const errors: string[] = [];
 
     // Validate required fields
     if (!request.userId) {
-      errors.push('userId is required');
+      errors.push("userId is required");
     }
 
     if (!request.type) {
-      errors.push('type is required');
+      errors.push("type is required");
     }
 
     if (!request.channels || request.channels.length === 0) {
-      errors.push('At least one channel is required');
+      errors.push("At least one channel is required");
     }
 
     // Validate channels
@@ -684,12 +760,16 @@ The MentorMinds Team
 
     // Validate scheduled date
     if (request.scheduledAt && request.scheduledAt <= new Date()) {
-      errors.push('scheduledAt must be in the future');
+      errors.push("scheduledAt must be in the future");
     }
 
     // Validate expiration date
-    if (request.expiresAt && request.scheduledAt && request.expiresAt <= request.scheduledAt) {
-      errors.push('expiresAt must be after scheduledAt');
+    if (
+      request.expiresAt &&
+      request.scheduledAt &&
+      request.expiresAt <= request.scheduledAt
+    ) {
+      errors.push("expiresAt must be after scheduledAt");
     }
 
     return {
@@ -701,7 +781,9 @@ The MentorMinds Team
   /**
    * Get scheduled notifications that are ready to be processed
    */
-  async getScheduledNotificationsForProcessing(limit: number = 100): Promise<NotificationRecord[]> {
+  async getScheduledNotificationsForProcessing(
+    limit: number = 100,
+  ): Promise<NotificationRecord[]> {
     return await NotificationsModel.getScheduledNotifications(limit);
   },
 
@@ -712,7 +794,7 @@ The MentorMinds Team
     try {
       return await NotificationsModel.deleteExpired();
     } catch (error) {
-      logger.error('Failed to cleanup expired notifications', { error });
+      logger.error("Failed to cleanup expired notifications", { error });
       return 0;
     }
   },
@@ -723,12 +805,16 @@ The MentorMinds Team
   async getDeliveryStatistics(
     startDate: Date,
     endDate: Date,
-    channel?: string
+    channel?: string,
   ): Promise<{ status: string; count: number }[]> {
     try {
-      return await NotificationDeliveryTrackingModel.getDeliveryStats(startDate, endDate, channel);
+      return await NotificationDeliveryTrackingModel.getDeliveryStats(
+        startDate,
+        endDate,
+        channel,
+      );
     } catch (error) {
-      logger.error('Failed to get delivery statistics', { error });
+      logger.error("Failed to get delivery statistics", { error });
       return [];
     }
   },
@@ -736,11 +822,17 @@ The MentorMinds Team
   /**
    * Get failed notifications for retry processing
    */
-  async getFailedNotificationsForRetry(limit: number = 50, olderThan?: Date): Promise<any[]> {
+  async getFailedNotificationsForRetry(
+    limit: number = 50,
+    olderThan?: Date,
+  ): Promise<any[]> {
     try {
-      return await NotificationDeliveryTrackingModel.getFailedDeliveries(limit, olderThan);
+      return await NotificationDeliveryTrackingModel.getFailedDeliveries(
+        limit,
+        olderThan,
+      );
     } catch (error) {
-      logger.error('Failed to get failed notifications for retry', { error });
+      logger.error("Failed to get failed notifications for retry", { error });
       return [];
     }
   },

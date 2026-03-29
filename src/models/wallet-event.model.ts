@@ -1,9 +1,16 @@
-import pool from '../config/database';
+import pool from "../config/database";
+import { logger } from "../utils/logger";
 
 export interface WalletEvent {
   id: string;
   user_id: string;
-  event_type: 'balance_check' | 'payout_request' | 'trustline_add' | 'transaction_view' | 'wallet_created' | 'earnings_view';
+  event_type:
+    | "balance_check"
+    | "payout_request"
+    | "trustline_add"
+    | "transaction_view"
+    | "wallet_created"
+    | "earnings_view";
   metadata: Record<string, any>;
   ip_address: string | null;
   user_agent: string | null;
@@ -33,7 +40,7 @@ export const WalletEventModel = {
 
   async create(eventData: {
     userId: string;
-    eventType: WalletEvent['event_type'];
+    eventType: WalletEvent["event_type"];
     metadata?: Record<string, any>;
     ipAddress?: string;
     userAgent?: string;
@@ -43,7 +50,7 @@ export const WalletEventModel = {
       VALUES ($1, $2, $3, $4, $5)
       RETURNING *;
     `;
-    
+
     const metadataJson = JSON.stringify(eventData.metadata || {});
     const values = [
       eventData.userId,
@@ -57,26 +64,34 @@ export const WalletEventModel = {
       const { rows } = await pool.query<WalletEvent>(query, values);
       return rows[0] || null;
     } catch (error) {
-      console.error('Failed to create wallet event:', error);
+      logger.error({ err: error }, "Failed to create wallet event");
       return null;
     }
   },
 
-  async findByUserId(userId: string, limit = 50, offset = 0): Promise<WalletEvent[]> {
+  async findByUserId(
+    userId: string,
+    limit = 50,
+    offset = 0,
+  ): Promise<WalletEvent[]> {
     const query = `
       SELECT * FROM wallet_events 
       WHERE user_id = $1 
       ORDER BY created_at DESC 
       LIMIT $2 OFFSET $3;
     `;
-    const { rows } = await pool.query<WalletEvent>(query, [userId, limit, offset]);
+    const { rows } = await pool.query<WalletEvent>(query, [
+      userId,
+      limit,
+      offset,
+    ]);
     return rows;
   },
 
   async findByEventType(
-    eventType: WalletEvent['event_type'], 
-    limit = 50, 
-    offset = 0
+    eventType: WalletEvent["event_type"],
+    limit = 50,
+    offset = 0,
   ): Promise<WalletEvent[]> {
     const query = `
       SELECT * FROM wallet_events 
@@ -84,15 +99,19 @@ export const WalletEventModel = {
       ORDER BY created_at DESC 
       LIMIT $2 OFFSET $3;
     `;
-    const { rows } = await pool.query<WalletEvent>(query, [eventType, limit, offset]);
+    const { rows } = await pool.query<WalletEvent>(query, [
+      eventType,
+      limit,
+      offset,
+    ]);
     return rows;
   },
 
   async findByUserAndType(
-    userId: string, 
-    eventType: WalletEvent['event_type'],
-    limit = 50, 
-    offset = 0
+    userId: string,
+    eventType: WalletEvent["event_type"],
+    limit = 50,
+    offset = 0,
   ): Promise<WalletEvent[]> {
     const query = `
       SELECT * FROM wallet_events
@@ -100,7 +119,12 @@ export const WalletEventModel = {
       ORDER BY created_at DESC
       LIMIT $3 OFFSET $4;
     `;
-    const { rows } = await pool.query<WalletEvent>(query, [userId, eventType, limit, offset]);
+    const { rows } = await pool.query<WalletEvent>(query, [
+      userId,
+      eventType,
+      limit,
+      offset,
+    ]);
     return rows;
   },
 
@@ -109,20 +133,20 @@ export const WalletEventModel = {
     eventsByType: Record<string, number>;
     recentActivity: WalletEvent[];
   }> {
-    let totalQuery = 'SELECT COUNT(*) FROM wallet_events';
-    let typeQuery = 'SELECT event_type, COUNT(*) as count FROM wallet_events';
-    let recentQuery = 'SELECT * FROM wallet_events';
+    let totalQuery = "SELECT COUNT(*) FROM wallet_events";
+    let typeQuery = "SELECT event_type, COUNT(*) as count FROM wallet_events";
+    let recentQuery = "SELECT * FROM wallet_events";
     const params: any[] = [];
 
     if (userId) {
-      totalQuery += ' WHERE user_id = $1';
-      typeQuery += ' WHERE user_id = $1';
-      recentQuery += ' WHERE user_id = $1';
+      totalQuery += " WHERE user_id = $1";
+      typeQuery += " WHERE user_id = $1";
+      recentQuery += " WHERE user_id = $1";
       params.push(userId);
     }
 
-    typeQuery += ' GROUP BY event_type';
-    recentQuery += ' ORDER BY created_at DESC LIMIT 10';
+    typeQuery += " GROUP BY event_type";
+    recentQuery += " ORDER BY created_at DESC LIMIT 10";
 
     const [totalResult, typeResult, recentResult] = await Promise.all([
       pool.query(totalQuery, params),
@@ -131,7 +155,7 @@ export const WalletEventModel = {
     ]);
 
     const eventsByType: Record<string, number> = {};
-    typeResult.rows.forEach(row => {
+    typeResult.rows.forEach((row) => {
       eventsByType[row.event_type] = parseInt(row.count, 10);
     });
 

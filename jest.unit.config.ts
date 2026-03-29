@@ -55,6 +55,11 @@ const config: Config = {
   forceExit: true,
   testTimeout: 30000,
   collectCoverageFrom: [
+    "src/**/*.ts",
+    "!src/**/*.d.ts",
+    "!src/**/index.ts",
+    "!src/tests/**",
+    "!src/docs/**",
     "src/services/auth.service.ts",
     "src/services/payments.service.ts",
     "src/services/bookings.service.ts",
