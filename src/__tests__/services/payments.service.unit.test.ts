@@ -1,51 +1,46 @@
-import { PaymentsService } from '../../services/payments.service';
-import pool from '../../config/database';
-import { BookingModel } from '../../models/booking.model';
-import { stellarService } from '../../services/stellar.service';
-import { SocketService } from '../../services/socket.service';
-import { mockDeep, mockReset } from 'jest-mock-extended';
-
+import { PaymentsService } from "../../services/payments.service";
+import pool from "../../config/database";
+import { BookingModel } from "../../models/booking.model";
+import { stellarService } from "../../services/stellar.service";
+import { SocketService } from "../../services/socket.service";
 // Mock external dependencies
-jest.mock('../../config/database');
-jest.mock('../../models/booking.model');
-jest.mock('../../services/stellar.service');
-jest.mock('../../services/socket.service');
+jest.mock("../../config/database");
+jest.mock("../../models/booking.model");
+jest.mock("../../services/stellar.service");
+jest.mock("../../services/socket.service");
 
 const mockPool = pool as jest.Mocked<typeof pool>;
 const mockBookingModel = BookingModel as jest.Mocked<typeof BookingModel>;
 const mockStellarService = stellarService as jest.Mocked<typeof stellarService>;
 const mockSocketService = SocketService as jest.Mocked<typeof SocketService>;
 
-describe('PaymentsService', () => {
+describe("PaymentsService", () => {
   beforeEach(() => {
-    mockReset(mockPool);
-    mockReset(mockBookingModel);
-    mockReset(mockStellarService);
-    mockReset(mockSocketService);
+    jest.clearAllMocks();
   });
 
-  describe('initiatePayment', () => {
-    it('should initiate payment successfully', async () => {
+  describe("initiatePayment", () => {
+    it("should initiate payment successfully", async () => {
       const data = {
-        userId: 'user-123',
-        bookingId: 'booking-123',
-        amount: '50.0000000',
-        currency: 'XLM',
-        description: 'Mentoring session payment',
+        userId: "user-123",
+        bookingId: "booking-123",
+        amount: "50.0000000",
+        currency: "XLM",
+        description: "Mentoring session payment",
       };
 
       const mockBooking = {
         id: data.bookingId,
         mentee_id: data.userId,
-        payment_status: 'pending',
+        payment_status: "pending",
       };
 
       const mockPayment = {
-        id: 'payment-123',
+        id: "payment-123",
         user_id: data.userId,
         booking_id: data.bookingId,
-        type: 'payment',
-        status: 'pending',
+        type: "payment",
+        status: "pending",
         amount: data.amount,
         currency: data.currency,
       };
@@ -57,69 +52,75 @@ describe('PaymentsService', () => {
 
       expect(result).toEqual(mockPayment);
       expect(mockPool.query).toHaveBeenCalledWith(
-        expect.stringContaining('INSERT INTO transactions'),
-        expect.any(Array)
+        expect.stringContaining("INSERT INTO transactions"),
+        expect.any(Array),
       );
     });
 
-    it('should throw error if booking not found', async () => {
+    it("should throw error if booking not found", async () => {
       const data = {
-        userId: 'user-123',
-        bookingId: 'nonexistent',
-        amount: '50.0000000',
+        userId: "user-123",
+        bookingId: "nonexistent",
+        amount: "50.0000000",
       };
 
       mockBookingModel.findById.mockResolvedValue(null);
 
-      await expect(PaymentsService.initiatePayment(data)).rejects.toThrow('Booking not found');
+      await expect(PaymentsService.initiatePayment(data)).rejects.toThrow(
+        "Booking not found",
+      );
     });
 
-    it('should throw error if user does not own booking', async () => {
+    it("should throw error if user does not own booking", async () => {
       const data = {
-        userId: 'user-123',
-        bookingId: 'booking-123',
-        amount: '50.0000000',
+        userId: "user-123",
+        bookingId: "booking-123",
+        amount: "50.0000000",
       };
 
       const mockBooking = {
         id: data.bookingId,
-        mentee_id: 'other-user',
-        payment_status: 'pending',
+        mentee_id: "other-user",
+        payment_status: "pending",
       };
 
       mockBookingModel.findById.mockResolvedValue(mockBooking as any);
 
-      await expect(PaymentsService.initiatePayment(data)).rejects.toThrow('Access denied');
+      await expect(PaymentsService.initiatePayment(data)).rejects.toThrow(
+        "Access denied",
+      );
     });
 
-    it('should throw error if booking already paid', async () => {
+    it("should throw error if booking already paid", async () => {
       const data = {
-        userId: 'user-123',
-        bookingId: 'booking-123',
-        amount: '50.0000000',
+        userId: "user-123",
+        bookingId: "booking-123",
+        amount: "50.0000000",
       };
 
       const mockBooking = {
         id: data.bookingId,
         mentee_id: data.userId,
-        payment_status: 'paid',
+        payment_status: "paid",
       };
 
       mockBookingModel.findById.mockResolvedValue(mockBooking as any);
 
-      await expect(PaymentsService.initiatePayment(data)).rejects.toThrow('Booking is already paid');
+      await expect(PaymentsService.initiatePayment(data)).rejects.toThrow(
+        "Booking is already paid",
+      );
     });
   });
 
-  describe('getPaymentById', () => {
-    it('should return payment if found', async () => {
-      const paymentId = 'payment-123';
-      const userId = 'user-123';
+  describe("getPaymentById", () => {
+    it("should return payment if found", async () => {
+      const paymentId = "payment-123";
+      const userId = "user-123";
 
       const mockPayment = {
         id: paymentId,
         user_id: userId,
-        status: 'pending',
+        status: "pending",
       };
 
       mockPool.query.mockResolvedValue({ rows: [mockPayment] });
@@ -129,102 +130,138 @@ describe('PaymentsService', () => {
       expect(result).toEqual(mockPayment);
     });
 
-    it('should throw error if payment not found', async () => {
-      const paymentId = 'nonexistent';
-      const userId = 'user-123';
+    it("should throw error if payment not found", async () => {
+      const paymentId = "nonexistent";
+      const userId = "user-123";
 
       mockPool.query.mockResolvedValue({ rows: [] });
 
-      await expect(PaymentsService.getPaymentById(paymentId, userId)).rejects.toThrow('Payment not found');
+      await expect(
+        PaymentsService.getPaymentById(paymentId, userId),
+      ).rejects.toThrow("Payment not found");
     });
   });
 
-  describe('getPaymentStatus', () => {
-    it('should return payment status', async () => {
-      const paymentId = 'payment-123';
-      const userId = 'user-123';
+  describe("getPaymentStatus", () => {
+    it("should return payment status", async () => {
+      const paymentId = "payment-123";
+      const userId = "user-123";
 
       const mockPayment = {
         id: paymentId,
         user_id: userId,
-        status: 'completed',
-        stellar_tx_hash: 'hash123',
+        status: "completed",
+        stellar_tx_hash: "hash123",
         updated_at: new Date(),
       };
 
-      jest.spyOn(PaymentsService, 'getPaymentById').mockResolvedValue(mockPayment as any);
+      jest
+        .spyOn(PaymentsService, "getPaymentById")
+        .mockResolvedValue(mockPayment as any);
 
       const result = await PaymentsService.getPaymentStatus(paymentId, userId);
 
       expect(result).toEqual({
         id: paymentId,
-        status: 'completed',
-        stellarTxHash: 'hash123',
+        status: "completed",
+        stellarTxHash: "hash123",
         updatedAt: mockPayment.updated_at,
       });
     });
   });
 
-  describe('confirmPayment', () => {
-    it('should confirm payment successfully', async () => {
-      const paymentId = 'payment-123';
-      const userId = 'user-123';
-      const stellarTxHash = 'hash123';
+  describe("confirmPayment", () => {
+    it("should confirm payment successfully", async () => {
+      const paymentId = "payment-123";
+      const userId = "user-123";
+      const stellarTxHash = "hash123";
 
       const mockPayment = {
         id: paymentId,
         user_id: userId,
-        status: 'pending',
-        booking_id: 'booking-123',
-        from_address: 'GABC...',
+        status: "pending",
+        booking_id: "booking-123",
+        from_address: "GABC...",
       };
 
-      const mockUpdatedPayment = { ...mockPayment, status: 'completed', stellar_tx_hash: stellarTxHash };
+      const mockUpdatedPayment = {
+        ...mockPayment,
+        status: "completed",
+        stellar_tx_hash: stellarTxHash,
+      };
 
-      jest.spyOn(PaymentsService, 'getPaymentById').mockResolvedValue(mockPayment as any);
-      mockStellarService.getAccount.mockResolvedValue({ id: 'GABC...' } as any);
+      jest
+        .spyOn(PaymentsService, "getPaymentById")
+        .mockResolvedValue(mockPayment as any);
+      mockStellarService.getAccount.mockResolvedValue({ id: "GABC..." } as any);
       mockPool.query
         .mockResolvedValueOnce({ rows: [mockUpdatedPayment] })
         .mockResolvedValueOnce({}) // booking update
         .mockResolvedValueOnce({}); // socket emit
       mockSocketService.emitToUser.mockResolvedValue();
 
-      const result = await PaymentsService.confirmPayment(paymentId, userId, stellarTxHash);
+      const result = await PaymentsService.confirmPayment(
+        paymentId,
+        userId,
+        stellarTxHash,
+      );
 
       expect(result).toEqual(mockUpdatedPayment);
       expect(mockSocketService.emitToUser).toHaveBeenCalled();
     });
 
-    it('should throw error if payment already confirmed', async () => {
-      const paymentId = 'payment-123';
-      const userId = 'user-123';
-      const stellarTxHash = 'hash123';
+    it("should throw error if payment already confirmed", async () => {
+      const paymentId = "payment-123";
+      const userId = "user-123";
+      const stellarTxHash = "hash123";
 
       const mockPayment = {
         id: paymentId,
         user_id: userId,
-        status: 'completed',
+        status: "completed",
       };
 
-      jest.spyOn(PaymentsService, 'getPaymentById').mockResolvedValue(mockPayment as any);
+      jest
+        .spyOn(PaymentsService, "getPaymentById")
+        .mockResolvedValue(mockPayment as any);
 
-      await expect(PaymentsService.confirmPayment(paymentId, userId, stellarTxHash)).rejects.toThrow('Payment already confirmed');
+      await expect(
+        PaymentsService.confirmPayment(paymentId, userId, stellarTxHash),
+      ).rejects.toThrow("Payment already confirmed");
     });
   });
 
-  describe('listUserPayments', () => {
-    it('should return paginated payments', async () => {
-      const userId = 'user-123';
-      const filters = { page: 1, limit: 10, status: 'completed' as const };
+  describe("listUserPayments", () => {
+    it("should return paginated payments", async () => {
+      const userId = "user-123";
+      const filters = { page: 1, limit: 10, status: "completed" as const };
 
       const mockPayments = [
-        { id: 'payment-1', user_id: userId, status: 'completed' },
-        { id: 'payment-2', user_id: userId, status: 'completed' },
+        { id: "payment-1", user_id: userId, status: "completed" },
+        { id: "payment-2", user_id: userId, status: "completed" },
       ];
 
-      mockPool.query
-        .mockResolvedValueOnce({ rows: mockPayments })
-        .mockResolvedValueOnce({ rows: [{ count: '2' }] });
+      mockPool.query.mockReset();
+
+      const sqlText = (sql: unknown): string => {
+        if (typeof sql === "string") return sql;
+        if (
+          sql &&
+          typeof sql === "object" &&
+          "text" in sql &&
+          typeof (sql as { text: string }).text === "string"
+        ) {
+          return (sql as { text: string }).text;
+        }
+        return "";
+      };
+      mockPool.query.mockImplementation((sql: unknown) => {
+        const q = sqlText(sql);
+        if (q.includes("COUNT(*)")) {
+          return Promise.resolve({ rows: [{ count: "2" }] });
+        }
+        return Promise.resolve({ rows: mockPayments });
+      });
 
       const result = await PaymentsService.listUserPayments(userId, filters);
 
@@ -233,46 +270,66 @@ describe('PaymentsService', () => {
     });
   });
 
-  describe('getPaymentHistory', () => {
-    it('should return payment history with total volume', async () => {
-      const userId = 'user-123';
+  describe("getPaymentHistory", () => {
+    it("should return payment history with total volume", async () => {
+      const userId = "user-123";
       const filters = { page: 1, limit: 10 };
 
-      const mockPayments = [{ id: 'payment-1', status: 'completed' }];
-      const mockVolume = { total_volume: '150.0000000' };
+      const mockPayments = [{ id: "payment-1", status: "completed" }];
+      const mockVolume = { total_volume: "150.0000000" };
 
-      jest.spyOn(PaymentsService, 'listUserPayments').mockResolvedValue({
+      jest.spyOn(PaymentsService, "listUserPayments").mockResolvedValue({
         payments: mockPayments,
         total: 1,
       });
-      mockPool.query.mockResolvedValue({ rows: [mockVolume] });
+      const sqlTextSum = (sql: unknown): string => {
+        if (typeof sql === "string") return sql;
+        if (
+          sql &&
+          typeof sql === "object" &&
+          "text" in sql &&
+          typeof (sql as { text: string }).text === "string"
+        ) {
+          return (sql as { text: string }).text;
+        }
+        return "";
+      };
+      mockPool.query.mockImplementation((sql: unknown) => {
+        const q = sqlTextSum(sql);
+        if (q.includes("COALESCE(SUM")) {
+          return Promise.resolve({ rows: [mockVolume] });
+        }
+        return Promise.resolve({ rows: [] });
+      });
 
       const result = await PaymentsService.getPaymentHistory(userId, filters);
 
       expect(result.payments).toEqual(mockPayments);
       expect(result.total).toBe(1);
-      expect(result.totalVolume).toBe('150.0000000');
+      expect(result.totalVolume).toBe("150.0000000");
     });
   });
 
-  describe('refundPayment', () => {
-    it('should refund payment successfully', async () => {
-      const paymentId = 'payment-123';
-      const userId = 'user-123';
-      const reason = 'Customer request';
+  describe("refundPayment", () => {
+    it("should refund payment successfully", async () => {
+      const paymentId = "payment-123";
+      const userId = "user-123";
+      const reason = "Customer request";
 
       const mockPayment = {
         id: paymentId,
         user_id: userId,
-        status: 'completed',
-        booking_id: 'booking-123',
-        amount: '50.0000000',
-        currency: 'XLM',
+        status: "completed",
+        booking_id: "booking-123",
+        amount: "50.0000000",
+        currency: "XLM",
       };
 
-      const mockRefundedPayment = { ...mockPayment, status: 'refunded' };
+      const mockRefundedPayment = { ...mockPayment, status: "refunded" };
 
-      jest.spyOn(PaymentsService, 'getPaymentById').mockResolvedValue(mockPayment as any);
+      jest
+        .spyOn(PaymentsService, "getPaymentById")
+        .mockResolvedValue(mockPayment as any);
 
       const mockClient = {
         query: jest.fn(),
@@ -281,49 +338,57 @@ describe('PaymentsService', () => {
       };
       mockPool.connect.mockResolvedValue(mockClient as any);
       mockClient.query
-        .mockResolvedValueOnce() // BEGIN
+        .mockResolvedValueOnce(undefined) // BEGIN
         .mockResolvedValueOnce({ rows: [mockRefundedPayment] }) // UPDATE original
-        .mockResolvedValueOnce() // INSERT refund
-        .mockResolvedValueOnce() // UPDATE booking
-        .mockResolvedValueOnce(); // COMMIT
+        .mockResolvedValueOnce(undefined) // INSERT refund
+        .mockResolvedValueOnce(undefined) // UPDATE booking
+        .mockResolvedValueOnce(undefined); // COMMIT
 
-      const result = await PaymentsService.refundPayment(paymentId, userId, reason);
+      const result = await PaymentsService.refundPayment(
+        paymentId,
+        userId,
+        reason,
+      );
 
       expect(result).toEqual(mockRefundedPayment);
-      expect(mockClient.query).toHaveBeenCalledWith('BEGIN');
-      expect(mockClient.query).toHaveBeenCalledWith('COMMIT');
+      expect(mockClient.query).toHaveBeenCalledWith("BEGIN");
+      expect(mockClient.query).toHaveBeenCalledWith("COMMIT");
     });
 
-    it('should throw error if payment already refunded', async () => {
-      const paymentId = 'payment-123';
-      const userId = 'user-123';
+    it("should throw error if payment already refunded", async () => {
+      const paymentId = "payment-123";
+      const userId = "user-123";
 
       const mockPayment = {
         id: paymentId,
         user_id: userId,
-        status: 'refunded',
+        status: "refunded",
       };
 
-      jest.spyOn(PaymentsService, 'getPaymentById').mockResolvedValue(mockPayment as any);
+      jest
+        .spyOn(PaymentsService, "getPaymentById")
+        .mockResolvedValue(mockPayment as any);
 
-      await expect(PaymentsService.refundPayment(paymentId, userId)).rejects.toThrow('Payment already refunded');
+      await expect(
+        PaymentsService.refundPayment(paymentId, userId),
+      ).rejects.toThrow("Payment already refunded");
     });
   });
 
-  describe('handleWebhook', () => {
-    it('should process webhook successfully', async () => {
+  describe("handleWebhook", () => {
+    it("should process webhook successfully", async () => {
       const payload = {
-        type: 'payment_received',
-        transaction_hash: 'hash123',
-        from: 'GABC...',
-        to: 'GXYZ...',
-        amount: '50.0000000',
+        type: "payment_received",
+        transaction_hash: "hash123",
+        from: "GABC...",
+        to: "GXYZ...",
+        amount: "50.0000000",
       };
 
       const mockPayment = {
-        id: 'payment-123',
-        status: 'pending',
-        booking_id: 'booking-123',
+        id: "payment-123",
+        status: "pending",
+        booking_id: "booking-123",
       };
 
       mockPool.query
@@ -335,29 +400,29 @@ describe('PaymentsService', () => {
 
       expect(result).toEqual({
         processed: true,
-        message: 'Payment confirmed via webhook',
+        message: "Payment confirmed via webhook",
       });
     });
 
-    it('should return not processed if no transaction hash', async () => {
+    it("should return not processed if no transaction hash", async () => {
       const payload = {
-        type: 'payment_received',
-        amount: '50.0000000',
+        type: "payment_received",
+        amount: "50.0000000",
       };
 
       const result = await PaymentsService.handleWebhook(payload);
 
       expect(result).toEqual({
         processed: false,
-        message: 'No transaction hash provided',
+        message: "No transaction hash provided",
       });
     });
 
-    it('should return not processed if no matching payment', async () => {
+    it("should return not processed if no matching payment", async () => {
       const payload = {
-        type: 'payment_received',
-        transaction_hash: 'hash123',
-        amount: '50.0000000',
+        type: "payment_received",
+        transaction_hash: "hash123",
+        amount: "50.0000000",
       };
 
       mockPool.query.mockResolvedValue({ rows: [] });
@@ -366,7 +431,7 @@ describe('PaymentsService', () => {
 
       expect(result).toEqual({
         processed: false,
-        message: 'No matching payment found',
+        message: "No matching payment found",
       });
     });
   });

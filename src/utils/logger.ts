@@ -1,4 +1,8 @@
 import pino from "pino";
+import os from 'os';
+import winston from 'winston';
+import DailyRotateFile from 'winston-daily-rotate-file';
+import path from 'path';
 
 // ---------------------------------------------------------------------------
 // Sensitive-field redaction paths (pino built-in redaction)
@@ -50,6 +54,15 @@ export const logger = pino({
       }),
 });
 
+/**
+ * Stable identifier for this process/pod.
+ * Priority: INSTANCE_ID env var → hostname → random suffix.
+ * Included in every log line so logs from multiple instances can be
+ * correlated and filtered independently in Grafana / CloudWatch / Datadog.
+ */
+export const INSTANCE_ID: string =
+  process.env.INSTANCE_ID || os.hostname() || `instance-${Math.random().toString(36).slice(2, 8)}`;
+
 // ---------------------------------------------------------------------------
 // Child-logger helper — attach requestId / correlationId to every log entry
 // ---------------------------------------------------------------------------
@@ -76,6 +89,22 @@ export function redactSensitiveFields(obj: unknown, depth = 0): unknown {
     "apiKey",
     "privateKey",
   ]);
+// Attach instanceId to every log entry so log streams from multiple
+// API replicas can be distinguished without grep.
+const instanceFormat = winston.format((info) => {
+  (info as any).instanceId = INSTANCE_ID;
+  return info;
+});
+
+export const logger = winston.createLogger({
+  level: LOG_LEVEL,
+  levels: winston.config.npm.levels,
+  defaultMeta: { instanceId: INSTANCE_ID },
+  format: instanceFormat(),
+  transports,
+  // Never exit on uncaught exceptions within the logger itself
+  exitOnError: false,
+});
 
   if (depth > 10 || obj === null || typeof obj !== "object") return obj;
   if (Array.isArray(obj))

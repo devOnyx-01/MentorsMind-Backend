@@ -1,11 +1,10 @@
-import { CacheService } from '../../services/cache.service';
-import { mockDeep, mockReset } from 'jest-mock-extended';
+import { CacheService } from "../../services/cache.service";
 
 // Mock Redis
-jest.mock('ioredis');
+jest.mock("ioredis");
 
 // Mock logger
-jest.mock('../../utils/logger.utils', () => ({
+jest.mock("../../utils/logger.utils", () => ({
   logger: {
     info: jest.fn(),
     warn: jest.fn(),
@@ -14,26 +13,26 @@ jest.mock('../../utils/logger.utils', () => ({
   },
 }));
 
-// Mock redis config
-jest.mock('../../config/redis.config', () => ({
+// Mock redis config — empty URL forces in-memory cache (stable under Jest + ioredis mock)
+jest.mock("../../config/redis.config", () => ({
   redisConfig: {
-    url: 'redis://localhost:6379',
+    url: "",
     defaultTtl: 3600,
     logMetrics: false,
     options: {},
   },
 }));
 
-describe('CacheService', () => {
+describe("CacheService", () => {
   beforeEach(() => {
     // Clear any in-memory cache state
     jest.clearAllMocks();
   });
 
-  describe('get', () => {
-    it('should return cached value when available', async () => {
-      const key = 'test:key';
-      const value = { data: 'test' };
+  describe("get", () => {
+    it("should return cached value when available", async () => {
+      const key = "test:get:available";
+      const value = { data: "test" };
 
       // First set the value
       await CacheService.set(key, value);
@@ -44,8 +43,8 @@ describe('CacheService', () => {
       expect(result).toEqual(value);
     });
 
-    it('should return null when key not found', async () => {
-      const key = 'nonexistent:key';
+    it("should return null when key not found", async () => {
+      const key = "nonexistent:key";
 
       const result = await CacheService.get(key);
 
@@ -53,10 +52,10 @@ describe('CacheService', () => {
     });
   });
 
-  describe('set', () => {
-    it('should set value with default TTL', async () => {
-      const key = 'test:key';
-      const value = { data: 'test' };
+  describe("set", () => {
+    it("should set value with default TTL", async () => {
+      const key = "test:key";
+      const value = { data: "test" };
 
       await CacheService.set(key, value);
 
@@ -65,9 +64,9 @@ describe('CacheService', () => {
       expect(result).toEqual(value);
     });
 
-    it('should set value with custom TTL', async () => {
-      const key = 'test:key';
-      const value = { data: 'test' };
+    it("should set value with custom TTL", async () => {
+      const key = "test:key";
+      const value = { data: "test" };
       const ttl = 60;
 
       await CacheService.set(key, value, ttl);
@@ -78,10 +77,10 @@ describe('CacheService', () => {
     });
   });
 
-  describe('del', () => {
-    it('should delete existing key', async () => {
-      const key = 'test:key';
-      const value = { data: 'test' };
+  describe("del", () => {
+    it("should delete existing key", async () => {
+      const key = "test:key";
+      const value = { data: "test" };
 
       // Set value first
       await CacheService.set(key, value);
@@ -98,23 +97,23 @@ describe('CacheService', () => {
       expect(result).toBeNull();
     });
 
-    it('should handle deleting non-existent key', async () => {
-      const key = 'nonexistent:key';
+    it("should handle deleting non-existent key", async () => {
+      const key = "nonexistent:key";
 
       // Should not throw
       await expect(CacheService.del(key)).resolves.toBeUndefined();
     });
   });
 
-  describe('invalidatePattern', () => {
-    it('should invalidate keys matching pattern', async () => {
-      const pattern = 'test:*';
-      const keys = ['test:key1', 'test:key2', 'other:key'];
+  describe("invalidatePattern", () => {
+    it("should invalidate keys matching pattern", async () => {
+      const pattern = "test:*";
+      const keys = ["test:key1", "test:key2", "other:key"];
 
       // Set multiple values
-      await CacheService.set(keys[0], { data: 'value1' });
-      await CacheService.set(keys[1], { data: 'value2' });
-      await CacheService.set(keys[2], { data: 'value3' });
+      await CacheService.set(keys[0], { data: "value1" });
+      await CacheService.set(keys[1], { data: "value2" });
+      await CacheService.set(keys[2], { data: "value3" });
 
       // Invalidate pattern
       await CacheService.invalidatePattern(pattern);
@@ -128,15 +127,15 @@ describe('CacheService', () => {
 
       // Non-matching key should still exist
       result = await CacheService.get(keys[2]);
-      expect(result).toEqual({ data: 'value3' });
+      expect(result).toEqual({ data: "value3" });
     });
   });
 
-  describe('wrap', () => {
-    it('should return cached value if available', async () => {
-      const key = 'test:wrap';
-      const cachedValue = { data: 'cached' };
-      const fn = jest.fn().mockResolvedValue({ data: 'fresh' });
+  describe("wrap", () => {
+    it("should return cached value if available", async () => {
+      const key = "test:wrap:cached-hit";
+      const cachedValue = { data: "cached" };
+      const fn = jest.fn().mockResolvedValue({ data: "fresh" });
 
       // Pre-populate cache
       await CacheService.set(key, cachedValue);
@@ -147,9 +146,9 @@ describe('CacheService', () => {
       expect(fn).not.toHaveBeenCalled();
     });
 
-    it('should call function and cache result if not cached', async () => {
-      const key = 'test:wrap';
-      const freshValue = { data: 'fresh' };
+    it("should call function and cache result if not cached", async () => {
+      const key = "test:wrap:uncached-fresh";
+      const freshValue = { data: "fresh" };
       const fn = jest.fn().mockResolvedValue(freshValue);
 
       const result = await CacheService.wrap(key, 3600, fn);
@@ -162,12 +161,14 @@ describe('CacheService', () => {
       expect(cached).toEqual(freshValue);
     });
 
-    it('should handle function errors', async () => {
-      const key = 'test:wrap';
-      const error = new Error('Function failed');
+    it("should handle function errors", async () => {
+      const key = "test:wrap:error-path";
+      const error = new Error("Function failed");
       const fn = jest.fn().mockRejectedValue(error);
 
-      await expect(CacheService.wrap(key, 3600, fn)).rejects.toThrow('Function failed');
+      await expect(CacheService.wrap(key, 3600, fn)).rejects.toThrow(
+        "Function failed",
+      );
       expect(fn).toHaveBeenCalledTimes(1);
 
       // Should not have cached the error
@@ -176,44 +177,44 @@ describe('CacheService', () => {
     });
   });
 
-  describe('getMetrics', () => {
-    it('should return current metrics', () => {
+  describe("getMetrics", () => {
+    it("should return current metrics", () => {
       const metrics = CacheService.getMetrics();
 
-      expect(metrics).toHaveProperty('hits');
-      expect(metrics).toHaveProperty('misses');
-      expect(metrics).toHaveProperty('sets');
-      expect(metrics).toHaveProperty('deletes');
-      expect(metrics).toHaveProperty('errors');
+      expect(metrics).toHaveProperty("hits");
+      expect(metrics).toHaveProperty("misses");
+      expect(metrics).toHaveProperty("sets");
+      expect(metrics).toHaveProperty("deletes");
+      expect(metrics).toHaveProperty("errors");
 
       // All should be numbers
-      Object.values(metrics).forEach(value => {
-        expect(typeof value).toBe('number');
+      Object.values(metrics).forEach((value) => {
+        expect(typeof value).toBe("number");
       });
     });
   });
 
-  describe('isDistributed', () => {
-    it('should return whether Redis is available', () => {
+  describe("isDistributed", () => {
+    it("should return whether Redis is available", () => {
       // Since we're using in-memory cache in tests, this should be false
       const isDistributed = CacheService.isDistributed();
 
-      expect(typeof isDistributed).toBe('boolean');
+      expect(typeof isDistributed).toBe("boolean");
     });
   });
 
-  describe('warm', () => {
-    it('should warm cache with multiple entries', async () => {
+  describe("warm", () => {
+    it("should warm cache with multiple entries", async () => {
       const entries = [
         {
-          key: 'warm:key1',
+          key: "warm:key1",
           ttl: 3600,
-          fn: jest.fn().mockResolvedValue({ data: 'value1' }),
+          fn: jest.fn().mockResolvedValue({ data: "value1" }),
         },
         {
-          key: 'warm:key2',
+          key: "warm:key2",
           ttl: 1800,
-          fn: jest.fn().mockResolvedValue({ data: 'value2' }),
+          fn: jest.fn().mockResolvedValue({ data: "value2" }),
         },
       ];
 
@@ -225,23 +226,23 @@ describe('CacheService', () => {
 
       // Verify values are cached
       const result1 = await CacheService.get(entries[0].key);
-      expect(result1).toEqual({ data: 'value1' });
+      expect(result1).toEqual({ data: "value1" });
 
       const result2 = await CacheService.get(entries[1].key);
-      expect(result2).toEqual({ data: 'value2' });
+      expect(result2).toEqual({ data: "value2" });
     });
 
-    it('should handle errors during warming', async () => {
+    it("should handle errors during warming", async () => {
       const entries = [
         {
-          key: 'warm:key1',
+          key: "warm:err:key1",
           ttl: 3600,
-          fn: jest.fn().mockResolvedValue({ data: 'value1' }),
+          fn: jest.fn().mockResolvedValue({ data: "value1" }),
         },
         {
-          key: 'warm:key2',
+          key: "warm:err:key2",
           ttl: 1800,
-          fn: jest.fn().mockRejectedValue(new Error('Failed to fetch')),
+          fn: jest.fn().mockRejectedValue(new Error("Failed to fetch")),
         },
       ];
 
@@ -250,7 +251,7 @@ describe('CacheService', () => {
 
       // First entry should still be cached
       const result1 = await CacheService.get(entries[0].key);
-      expect(result1).toEqual({ data: 'value1' });
+      expect(result1).toEqual({ data: "value1" });
 
       // Second entry should not be cached due to error
       const result2 = await CacheService.get(entries[1].key);

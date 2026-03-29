@@ -9,11 +9,11 @@ jest.mock("bcryptjs");
 jest.mock("jsonwebtoken");
 jest.mock("crypto");
 
-import { AuthService } from "../../services/auth.service";
-import pool from "../../config/database";
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
 import crypto from "crypto";
+import jwt from "jsonwebtoken";
+import pool from "../../config/database";
+import { AuthService } from "../../services/auth.service";
 
 const mockPool = pool as unknown as { query: jest.Mock; connect: jest.Mock };
 const mockBcrypt = bcrypt as unknown as {
@@ -27,13 +27,19 @@ const mockCrypto = crypto as unknown as {
   createHash: jest.Mock;
 };
 
+function createHashMock(digestHex: string): crypto.Hash {
+  const update = jest.fn().mockReturnThis();
+  const digest = jest.fn().mockReturnValue(digestHex);
+  return { update, digest } as unknown as crypto.Hash;
+}
+
 describe("AuthService", () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
   describe("register", () => {
-    it("should register a new user successfully", async () => {
+    it("registra un usuario y devuelve tokens", async () => {
       const input = {
         email: "test@example.com",
         password: "password123",
@@ -43,8 +49,8 @@ describe("AuthService", () => {
       };
 
       mockPool.query
-        .mockResolvedValueOnce({ rows: [] }) // Email check
-        .mockResolvedValueOnce({ rows: [{ id: "user-123", role: "mentee" }] }); // Insert
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ id: "user-123", role: "mentee" }] });
 
       mockBcrypt.genSalt.mockResolvedValue("salt");
       mockBcrypt.hash.mockResolvedValue("hashedPassword");
@@ -54,14 +60,11 @@ describe("AuthService", () => {
 
       const result = await AuthService.register(input);
 
-      expect(result).toEqual({
-        ...mockTokens,
-        userId: "user-123",
-      });
+      expect(result).toEqual({ ...mockTokens, userId: "user-123" });
       expect(mockPool.query).toHaveBeenCalledTimes(2);
     });
 
-    it("should throw error if email already exists", async () => {
+    it("rechaza email duplicado", async () => {
       const input = {
         email: "existing@example.com",
         password: "password123",
@@ -76,14 +79,27 @@ describe("AuthService", () => {
         "Email is already registered.",
       );
     });
-  });
 
-  describe("login", () => {
-    it("should login user successfully", async () => {
+    it("propaga fallo de base de datos al comprobar email", async () => {
       const input = {
         email: "test@example.com",
         password: "password123",
+        firstName: "Test",
+        lastName: "User",
+        role: "mentee" as const,
       };
+
+      mockPool.query.mockRejectedValueOnce(new Error("connection refused"));
+
+      await expect(AuthService.register(input)).rejects.toThrow(
+        "connection refused",
+      );
+    });
+  });
+
+  describe("login", () => {
+    it("inicia sesión con credenciales válidas", async () => {
+      const input = { email: "test@example.com", password: "password123" };
 
       mockPool.query.mockResolvedValue({
         rows: [{ id: "user-123", role: "mentee", password_hash: "hashed" }],
@@ -102,12 +118,8 @@ describe("AuthService", () => {
       });
     });
 
-    it("should throw error for invalid email", async () => {
-      const input = {
-        email: "nonexistent@example.com",
-        password: "password123",
-      };
-
+    it("rechaza email inexistente", async () => {
+      const input = { email: "no@example.com", password: "password123" };
       mockPool.query.mockResolvedValue({ rows: [] });
 
       await expect(AuthService.login(input)).rejects.toThrow(
@@ -115,12 +127,8 @@ describe("AuthService", () => {
       );
     });
 
-    it("should throw error for invalid password", async () => {
-      const input = {
-        email: "test@example.com",
-        password: "wrongpassword",
-      };
-
+    it("rechaza contraseña incorrecta", async () => {
+      const input = { email: "test@example.com", password: "wrong" };
       mockPool.query.mockResolvedValue({
         rows: [{ id: "user-123", role: "mentee", password_hash: "hashed" }],
       });
@@ -133,7 +141,7 @@ describe("AuthService", () => {
   });
 
   describe("refresh", () => {
-    it("should refresh tokens successfully", async () => {
+    it("renueva tokens cuando el refresh coincide con la base de datos", async () => {
       const refreshToken = "valid-refresh-token";
 
       mockJwt.verify.mockReturnValue({ sub: "user-123", role: "mentee" });
@@ -152,60 +160,81 @@ describe("AuthService", () => {
       expect(result).toEqual(mockTokens);
     });
 
-    it("should throw error for invalid refresh token", async () => {
-      const refreshToken = "invalid-token";
-
+    it("rechaza token JWT inválido", async () => {
       mockJwt.verify.mockImplementation(() => {
         throw new Error("Invalid token");
       });
 
-      await expect(AuthService.refresh(refreshToken)).rejects.toThrow(
+      await expect(AuthService.refresh("bad")).rejects.toThrow(
+        "Invalid or expired refresh token.",
+      );
+    });
+
+    it("rechaza reutilización de refresh (no coincide con DB)", async () => {
+      mockJwt.verify.mockReturnValue({ sub: "user-123", role: "mentee" });
+      mockPool.query.mockResolvedValue({
+        rows: [{ refresh_token: "otro-token", role: "mentee" }],
+      });
+
+      await expect(AuthService.refresh("token-a")).rejects.toThrow(
+        "Invalid or expired refresh token.",
+      );
+    });
+
+    it("rechaza usuario inactivo o inexistente en refresh", async () => {
+      mockJwt.verify.mockReturnValue({ sub: "user-123", role: "mentee" });
+      mockPool.query.mockResolvedValue({ rows: [] });
+
+      await expect(AuthService.refresh("token-a")).rejects.toThrow(
         "Invalid or expired refresh token.",
       );
     });
   });
 
   describe("logout", () => {
-    it("should clear refresh token", async () => {
-      const userId = "user-123";
+    it("limpia el refresh token", async () => {
+      mockPool.query.mockResolvedValue({
+        rows: [],
+        rowCount: 1,
+        command: "UPDATE",
+        oid: 0,
+        fields: [],
+      });
 
-      mockPool.query.mockResolvedValue({});
-
-      await AuthService.logout(userId);
+      await AuthService.logout("user-123");
 
       expect(mockPool.query).toHaveBeenCalledWith(
         "UPDATE users SET refresh_token = NULL WHERE id = $1",
-        [userId],
+        ["user-123"],
       );
     });
   });
 
   describe("forgotPassword", () => {
-    it("should generate reset token for existing user", async () => {
-      const email = "test@example.com";
-
+    it("genera token de reset para usuario existente", async () => {
       mockPool.query
         .mockResolvedValueOnce({ rows: [{ id: "user-123" }] })
-        .mockResolvedValueOnce({});
+        .mockResolvedValueOnce({
+          rows: [],
+          rowCount: 1,
+          command: "UPDATE",
+          oid: 0,
+          fields: [],
+        });
 
       mockCrypto.randomBytes.mockReturnValue(Buffer.from("randombytes"));
-      mockCrypto.createHash.mockReturnValue({
-        update: jest.fn().mockReturnThis(),
-        digest: jest.fn().mockReturnValue("hashed-token"),
-      } as unknown as crypto.Hash);
+      mockCrypto.createHash.mockReturnValue(createHashMock("hashed-token"));
 
-      const result = await AuthService.forgotPassword(email);
+      const result = await AuthService.forgotPassword("test@example.com");
 
-      expect(result).toBe("72616e646f6d6279746573"); // hex of 'randombytes'
+      expect(result).toBe("72616e646f6d6279746573");
       expect(mockPool.query).toHaveBeenCalledTimes(2);
     });
 
-    it("should return empty string for non-existent user", async () => {
-      const email = "nonexistent@example.com";
-
+    it("no revela existencia de usuario", async () => {
       mockPool.query.mockResolvedValueOnce({ rows: [] });
 
-      const result = await AuthService.forgotPassword(email);
+      const result = await AuthService.forgotPassword("ghost@example.com");
 
       expect(result).toBe("");
       expect(mockPool.query).toHaveBeenCalledTimes(1);
@@ -213,20 +242,20 @@ describe("AuthService", () => {
   });
 
   describe("resetPassword", () => {
-    it("should reset password successfully", async () => {
-      const input = {
-        token: "reset-token",
-        newPassword: "newpassword123",
-      };
+    it("actualiza contraseña con token válido", async () => {
+      const input = { token: "reset-token", newPassword: "newpassword123" };
 
-      mockCrypto.createHash.mockReturnValue({
-        update: jest.fn().mockReturnThis(),
-        digest: jest.fn().mockReturnValue("hashed-token"),
-      } as unknown as crypto.Hash);
+      mockCrypto.createHash.mockReturnValue(createHashMock("hashed-token"));
 
       mockPool.query
         .mockResolvedValueOnce({ rows: [{ id: "user-123" }] })
-        .mockResolvedValueOnce({});
+        .mockResolvedValueOnce({
+          rows: [],
+          rowCount: 1,
+          command: "UPDATE",
+          oid: 0,
+          fields: [],
+        });
 
       mockBcrypt.genSalt.mockResolvedValue("salt");
       mockBcrypt.hash.mockResolvedValue("new-hashed-password");
@@ -237,17 +266,10 @@ describe("AuthService", () => {
       expect(mockPool.query).toHaveBeenCalledTimes(2);
     });
 
-    it("should throw error for invalid reset token", async () => {
-      const input = {
-        token: "invalid-token",
-        newPassword: "newpassword123",
-      };
+    it("rechaza token inválido o expirado", async () => {
+      const input = { token: "invalid-token", newPassword: "newpassword123" };
 
-      mockCrypto.createHash.mockReturnValue({
-        update: jest.fn().mockReturnThis(),
-        digest: jest.fn().mockReturnValue("hashed-token"),
-      } as unknown as crypto.Hash);
-
+      mockCrypto.createHash.mockReturnValue(createHashMock("hashed-token"));
       mockPool.query.mockResolvedValueOnce({ rows: [] });
 
       await expect(AuthService.resetPassword(input)).rejects.toThrow(
@@ -257,17 +279,19 @@ describe("AuthService", () => {
   });
 
   describe("generateTokens", () => {
-    it("should generate and save tokens", async () => {
-      const userId = "user-123";
-      const role = "mentee";
-
+    it("firma tokens y persiste refresh en base de datos", async () => {
       mockJwt.sign
         .mockReturnValueOnce("access-token")
         .mockReturnValueOnce("refresh-token");
+      mockPool.query.mockResolvedValue({
+        rows: [],
+        rowCount: 1,
+        command: "UPDATE",
+        oid: 0,
+        fields: [],
+      });
 
-      mockPool.query.mockResolvedValue({});
-
-      const result = await AuthService.generateTokens(userId, role);
+      const result = await AuthService.generateTokens("user-123", "mentee");
 
       expect(result).toEqual({
         accessToken: "access-token",
@@ -276,7 +300,7 @@ describe("AuthService", () => {
       expect(mockJwt.sign).toHaveBeenCalledTimes(2);
       expect(mockPool.query).toHaveBeenCalledWith(
         "UPDATE users SET refresh_token = $1 WHERE id = $2",
-        ["refresh-token", userId],
+        ["refresh-token", "user-123"],
       );
     });
   });

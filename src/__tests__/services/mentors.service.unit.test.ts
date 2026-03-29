@@ -1,33 +1,30 @@
-import { MentorsService } from '../../services/mentors.service';
-import pool from '../../config/database';
-import { CacheService } from '../../services/cache.service';
-import { mockDeep, mockReset } from 'jest-mock-extended';
-
+import { MentorsService } from "../../services/mentors.service";
+import pool from "../../config/database";
+import { CacheService } from "../../services/cache.service";
 // Mock external dependencies
-jest.mock('../../config/database');
-jest.mock('../../services/cache.service');
+jest.mock("../../config/database");
+jest.mock("../../services/cache.service");
 
 const mockPool = pool as jest.Mocked<typeof pool>;
 const mockCacheService = CacheService as jest.Mocked<typeof CacheService>;
 
-describe('MentorsService', () => {
+describe("MentorsService", () => {
   beforeEach(() => {
-    mockReset(mockPool);
-    mockReset(mockCacheService);
+    jest.clearAllMocks();
   });
 
-  describe('createProfile', () => {
-    it('should create mentor profile successfully', async () => {
-      const userId = 'user-123';
+  describe("createProfile", () => {
+    it("should create mentor profile successfully", async () => {
+      const userId = "user-123";
       const payload = {
-        bio: 'Experienced mentor',
+        bio: "Experienced mentor",
         hourlyRate: 50,
-        expertise: ['JavaScript', 'React'],
+        expertise: ["JavaScript", "React"],
       };
 
       const mockMentor = {
         id: userId,
-        role: 'mentor',
+        role: "mentor",
         bio: payload.bio,
         hourly_rate: payload.hourlyRate,
         expertise: payload.expertise,
@@ -39,14 +36,14 @@ describe('MentorsService', () => {
 
       expect(result).toEqual(mockMentor);
       expect(mockPool.query).toHaveBeenCalledWith(
-        expect.stringContaining('UPDATE users SET'),
-        expect.any(Array)
+        expect.stringContaining("UPDATE users SET"),
+        expect.any(Array),
       );
     });
 
-    it('should return null if user not found', async () => {
-      const userId = 'nonexistent';
-      const payload = { bio: 'Test bio' };
+    it("should return null if user not found", async () => {
+      const userId = "nonexistent";
+      const payload = { bio: "Test bio" };
 
       mockPool.query.mockResolvedValue({ rows: [] });
 
@@ -56,10 +53,10 @@ describe('MentorsService', () => {
     });
   });
 
-  describe('findById', () => {
-    it('should return mentor from cache if available', async () => {
-      const mentorId = 'mentor-123';
-      const mockMentor = { id: mentorId, role: 'mentor' };
+  describe("findById", () => {
+    it("should return mentor from cache if available", async () => {
+      const mentorId = "mentor-123";
+      const mockMentor = { id: mentorId, role: "mentor" };
 
       mockCacheService.wrap.mockResolvedValue(mockMentor);
 
@@ -69,8 +66,8 @@ describe('MentorsService', () => {
       expect(mockCacheService.wrap).toHaveBeenCalled();
     });
 
-    it('should return null if mentor not found', async () => {
-      const mentorId = 'nonexistent';
+    it("should return null if mentor not found", async () => {
+      const mentorId = "nonexistent";
 
       mockCacheService.wrap.mockResolvedValue(null);
 
@@ -80,12 +77,12 @@ describe('MentorsService', () => {
     });
   });
 
-  describe('update', () => {
-    it('should update mentor profile successfully', async () => {
-      const mentorId = 'mentor-123';
+  describe("update", () => {
+    it("should update mentor profile successfully", async () => {
+      const mentorId = "mentor-123";
       const payload = {
-        firstName: 'Updated',
-        bio: 'Updated bio',
+        firstName: "Updated",
+        bio: "Updated bio",
         hourlyRate: 60,
       };
 
@@ -107,9 +104,9 @@ describe('MentorsService', () => {
       expect(mockCacheService.invalidatePattern).toHaveBeenCalledTimes(2);
     });
 
-    it('should return null if mentor not found', async () => {
-      const mentorId = 'nonexistent';
-      const payload = { bio: 'Test' };
+    it("should return null if mentor not found", async () => {
+      const mentorId = "nonexistent";
+      const payload = { bio: "Test" };
 
       mockPool.query.mockResolvedValue({ rows: [] });
 
@@ -119,19 +116,19 @@ describe('MentorsService', () => {
     });
   });
 
-  describe('list', () => {
-    it('should return paginated mentor list', async () => {
+  describe("list", () => {
+    it("should return paginated mentor list", async () => {
       const query = {
         page: 1,
         limit: 10,
-        search: 'John',
-        sortBy: 'createdAt' as const,
-        sortOrder: 'desc' as const,
+        search: "John",
+        sortBy: "createdAt" as const,
+        sortOrder: "desc" as const,
       };
 
       const mockMentors = [
-        { id: 'mentor-1', first_name: 'John', role: 'mentor' },
-        { id: 'mentor-2', first_name: 'Jane', role: 'mentor' },
+        { id: "mentor-1", first_name: "John", role: "mentor" },
+        { id: "mentor-2", first_name: "Jane", role: "mentor" },
       ];
 
       mockCacheService.wrap.mockResolvedValue({
@@ -150,11 +147,11 @@ describe('MentorsService', () => {
     });
   });
 
-  describe('setAvailability', () => {
-    it('should set mentor availability successfully', async () => {
-      const mentorId = 'mentor-123';
+  describe("setAvailability", () => {
+    it("should set mentor availability successfully", async () => {
+      const mentorId = "mentor-123";
       const payload = {
-        schedule: { monday: ['09:00-17:00'] },
+        schedule: { monday: ["09:00-17:00"] },
         isAvailable: true,
       };
 
@@ -174,11 +171,11 @@ describe('MentorsService', () => {
     });
   });
 
-  describe('getAvailability', () => {
-    it('should return mentor availability', async () => {
-      const mentorId = 'mentor-123';
+  describe("getAvailability", () => {
+    it("should return mentor availability", async () => {
+      const mentorId = "mentor-123";
       const mockAvailability = {
-        availability_schedule: { monday: ['09:00-17:00'] },
+        availability_schedule: { monday: ["09:00-17:00"] },
         is_available: true,
       };
 
@@ -192,8 +189,8 @@ describe('MentorsService', () => {
       });
     });
 
-    it('should return null if mentor not found', async () => {
-      const mentorId = 'nonexistent';
+    it("should return null if mentor not found", async () => {
+      const mentorId = "nonexistent";
 
       mockPool.query.mockResolvedValue({ rows: [] });
 
@@ -203,9 +200,9 @@ describe('MentorsService', () => {
     });
   });
 
-  describe('updatePricing', () => {
-    it('should update mentor pricing successfully', async () => {
-      const mentorId = 'mentor-123';
+  describe("updatePricing", () => {
+    it("should update mentor pricing successfully", async () => {
+      const mentorId = "mentor-123";
       const payload = { hourlyRate: 75 };
 
       const mockUpdatedMentor = {
@@ -225,23 +222,23 @@ describe('MentorsService', () => {
     });
   });
 
-  describe('getSessions', () => {
-    it('should return mentor sessions with pagination', async () => {
-      const mentorId = 'mentor-123';
+  describe("getSessions", () => {
+    it("should return mentor sessions with pagination", async () => {
+      const mentorId = "mentor-123";
       const query = {
         page: 1,
         limit: 10,
-        status: 'scheduled',
+        status: "scheduled",
       };
 
       const mockSessions = [
-        { id: 'session-1', mentor_id: mentorId, status: 'scheduled' },
-        { id: 'session-2', mentor_id: mentorId, status: 'scheduled' },
+        { id: "session-1", mentor_id: mentorId, status: "scheduled" },
+        { id: "session-2", mentor_id: mentorId, status: "scheduled" },
       ];
 
       mockPool.query
         .mockResolvedValueOnce({ rows: mockSessions })
-        .mockResolvedValueOnce({ rows: [{ count: '2' }] });
+        .mockResolvedValueOnce({ rows: [{ count: "2" }] });
 
       const result = await MentorsService.getSessions(mentorId, query);
 
@@ -250,23 +247,23 @@ describe('MentorsService', () => {
     });
   });
 
-  describe('getEarnings', () => {
-    it('should return earnings summary', async () => {
-      const mentorId = 'mentor-123';
+  describe("getEarnings", () => {
+    it("should return earnings summary", async () => {
+      const mentorId = "mentor-123";
       const query = {
-        from: new Date('2023-01-01'),
-        to: new Date('2023-12-31'),
-        groupBy: 'month' as const,
+        from: new Date("2023-01-01"),
+        to: new Date("2023-12-31"),
+        groupBy: "month" as const,
       };
 
       const mockSummary = {
-        total_earnings: '1200.00',
-        total_sessions: '24',
+        total_earnings: "1200.00",
+        total_sessions: "24",
       };
 
       const mockBreakdown = [
-        { period: '2023-01-01', earnings: '100.00', sessions: '2' },
-        { period: '2023-02-01', earnings: '200.00', sessions: '4' },
+        { period: "2023-01-01", earnings: "100.00", sessions: "2" },
+        { period: "2023-02-01", earnings: "200.00", sessions: "4" },
       ];
 
       mockPool.query
@@ -281,24 +278,26 @@ describe('MentorsService', () => {
       expect(result.breakdown).toHaveLength(2);
     });
 
-    it('should throw error for invalid groupBy', async () => {
-      const mentorId = 'mentor-123';
+    it("should throw error for invalid groupBy", async () => {
+      const mentorId = "mentor-123";
       const query = {
-        groupBy: 'invalid' as any,
+        groupBy: "invalid" as any,
       };
 
-      await expect(MentorsService.getEarnings(mentorId, query)).rejects.toThrow('Invalid groupBy value');
+      await expect(MentorsService.getEarnings(mentorId, query)).rejects.toThrow(
+        "Invalid groupBy value",
+      );
     });
   });
 
-  describe('submitVerification', () => {
-    it('should submit verification request successfully', async () => {
-      const mentorId = 'mentor-123';
+  describe("submitVerification", () => {
+    it("should submit verification request successfully", async () => {
+      const mentorId = "mentor-123";
       const payload = {
-        documentType: 'passport',
-        documentUrl: 'https://example.com/doc.pdf',
-        linkedinUrl: 'https://linkedin.com/in/mentor',
-        additionalNotes: 'Additional notes',
+        documentType: "passport",
+        documentUrl: "https://example.com/doc.pdf",
+        linkedinUrl: "https://linkedin.com/in/mentor",
+        additionalNotes: "Additional notes",
       };
 
       mockPool.query.mockResolvedValue({});
@@ -307,11 +306,11 @@ describe('MentorsService', () => {
 
       expect(result).toEqual({
         submitted: true,
-        message: 'Verification request submitted successfully',
+        message: "Verification request submitted successfully",
       });
       expect(mockPool.query).toHaveBeenCalledWith(
-        expect.stringContaining('UPDATE users SET metadata'),
-        expect.any(Array)
+        expect.stringContaining("jsonb_set"),
+        expect.any(Array),
       );
     });
   });

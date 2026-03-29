@@ -1,6 +1,7 @@
-import { Request, Response, NextFunction } from 'express';
-import { logger } from '../utils/logger.utils';
-import { getCorrelationId } from '../middleware/correlation-id.middleware';
+import { Request, Response, NextFunction } from "express";
+import * as Sentry from "@sentry/node";
+import { logger } from "../utils/logger.utils";
+import { getCorrelationId } from "../middleware/correlation-id.middleware";
 
 export interface AppError extends Error {
   statusCode?: number;
@@ -14,22 +15,40 @@ export const errorHandler = (
   _next: NextFunction,
 ) => {
   const statusCode = err.statusCode || 500;
-  const message = err.message || 'Internal Server Error';
+  const message = err.message || "Internal Server Error";
+  const requestId = res.locals?.requestId;
+  const user = (req as any).user;
 
-  // Log error
   logger.error(`${req.method} ${req.path}`, {
     correlationId: getCorrelationId() ?? req.correlationId,
+    requestId,
     error: message,
     statusCode,
     stack: err.stack,
     ip: req.ip,
   });
 
+  // Only report 5xx errors to Sentry
+  if (statusCode >= 500) {
+    Sentry.withScope((scope) => {
+      if (user) {
+        scope.setUser({ id: user.userId, role: user.role });
+      }
+      scope.setContext("request", {
+        requestId,
+        method: req.method,
+        path: req.path,
+        statusCode,
+      });
+      Sentry.captureException(err);
+    });
+  }
+
   res.status(statusCode).json({
-    status: 'error',
+    status: "error",
     message,
     timestamp: new Date().toISOString(),
-    ...(process.env.NODE_ENV === 'development' && {
+    ...(process.env.NODE_ENV === "development" && {
       stack: err.stack,
       path: req.path,
     }),
