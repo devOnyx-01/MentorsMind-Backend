@@ -1,9 +1,10 @@
 import pool from '../config/database';
 import { server } from '../config/stellar';
-import monitoringConfig, { MonitoringConfig } from '../config/monitoring.config';
+import monitoringConfig from '../config/monitoring.config';
 import { redisConfig } from '../config/redis.config';
 import { logger } from '../utils/logger.utils';
-import promClient, { Registry, Gauge, Histogram, Counter } from 'prom-client';
+import { collectCacheMetrics } from '../utils/cache-metrics.utils';
+import promClient, { Registry, Gauge } from 'prom-client';
 import config from '../config';
 import { CURRENT_VERSION } from '../config/api-versions.config';
 import * as os from 'node:os';
@@ -22,6 +23,7 @@ export interface HealthStatus {
   components: {
     database: HealthComponent;
     redis?: HealthComponent;
+    cache?: HealthComponent;
     stellar: HealthComponent;
     system: HealthComponent;
   };
@@ -95,7 +97,11 @@ let redisHealthClient: any = null;
 
 async function getRedisHealthClient() {
   if (redisHealthClient) return redisHealthClient;
-  
+
+  if (!redisConfig.url) {
+    return null;
+  }
+
   try {
     const Redis = (await import('ioredis')).default;
     redisHealthClient = new Redis(redisConfig.url, redisConfig.options);
@@ -136,7 +142,7 @@ async function checkRedis(): Promise<HealthComponent | undefined> {
     const client = await getRedisHealthClient();
     if (!client) return { status: 'degraded' as const, responseTimeMs: 0, details: { fallback: 'memory' } };
     
-    const [[resTime], memoryInfo] = await Promise.all([
+    const [, memoryInfo] = await Promise.all([
       client.ping() as any,
       client.info('memory') as any
     ]);
@@ -200,6 +206,40 @@ function checkSystem(): HealthComponent {
   };
 }
 
+function checkCache(): HealthComponent {
+  if (!monitoringConfig.metrics.trackCache) {
+    return undefined as any;
+  }
+
+  try {
+    const cacheMetrics = collectCacheMetrics();
+    const total = cacheMetrics.hits + cacheMetrics.misses;
+    const errorRate = total > 0 ? (cacheMetrics.errors / total) * 100 : 0;
+
+    // Cache is degraded if error rate is above 5% or if it's not distributed
+    const isDegraded = errorRate > 5 || cacheMetrics.backend === 0;
+    const status = isDegraded ? 'degraded' : 'healthy';
+
+    return {
+      status: status as any,
+      details: {
+        hitRate: cacheMetrics.hitRate,
+        errorRate: parseFloat(errorRate.toFixed(2)),
+        backend: cacheMetrics.backend === 1 ? 'redis' : 'memory',
+        hits: cacheMetrics.hits,
+        misses: cacheMetrics.misses,
+        errors: cacheMetrics.errors,
+      },
+    };
+  } catch (error) {
+    logger.warn('Health: Cache check failed', { error: (error as Error).message });
+    return {
+      status: 'degraded' as const,
+      details: { error: (error as Error).message },
+    };
+  }
+}
+
 function updateSystemMetrics() {
   checkSystem();
 }
@@ -213,21 +253,28 @@ export class HealthService {
   static async checkHealth(): Promise<HealthStatus> {
     const start = Date.now();
     
-    const [database, redis, stellar, system] = await Promise.allSettled([
+    const [database, redis, cache, stellar, system] = await Promise.allSettled([
       checkDatabase(),
       checkRedis(),
+      Promise.resolve(checkCache()),
       checkStellar(),
       Promise.resolve(checkSystem())
     ]);
     
-    const components = {
+    const components: any = {
       database: (database.status === 'fulfilled' ? database.value : { status: 'down' as const, details: { error: 'check failed' } }) as HealthComponent,
       redis: (redis.status === 'fulfilled' ? redis.value : { status: 'down' as const }) as HealthComponent | undefined,
+      cache: (cache.status === 'fulfilled' ? cache.value : undefined) as HealthComponent | undefined,
       stellar: (stellar.status === 'fulfilled' ? stellar.value : { status: 'down' as const }) as HealthComponent,
       system: (system.status === 'fulfilled' ? system.value : { status: 'down' as const }) as HealthComponent,
     };
+
+    // Remove undefined cache component if not tracking
+    if (!components.cache) {
+      delete components.cache;
+    }
     
-    const degradedCount = Object.values(components).filter(c => c.status !== 'healthy').length;
+    const degradedCount = Object.values(components).filter((c: any) => c && c.status !== 'healthy').length;
     const overall = degradedCount === 0 ? 'healthy' : (degradedCount < 3 ? 'degraded' : 'down') as any;
     
     if (monitoringConfig.metrics.trackDatabase) {

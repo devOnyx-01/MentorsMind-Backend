@@ -1,4 +1,12 @@
+import { reportQueue } from "../queues/report.queue";
+import { sessionReminderQueue } from "../queues/sessionReminder.queue";
+import { escrowCheckQueue } from "../queues/escrow-check.queue";
+import { VerificationService } from "../services/verification.service";
+import { logger } from "../utils/logger.utils";
 import { reportQueue } from '../queues/report.queue';
+import { sessionReminderQueue } from '../queues/sessionReminder.queue';
+import { notificationCleanupQueue } from '../queues/notificationCleanup.queue';
+import { VerificationService } from '../services/verification.service';
 import { logger } from '../utils/logger.utils';
 
 /**
@@ -9,23 +17,72 @@ import { logger } from '../utils/logger.utils';
 export async function startScheduler(): Promise<void> {
   // Weekly earnings report — every Monday at 08:00 UTC
   await reportQueue.add(
-    'weekly-earnings-scheduled',
+    "weekly-earnings-scheduled",
     {
-      reportType: 'weekly-earnings',
-      periodStart: '', // worker computes dynamically from current date
-      periodEnd: '',
+      reportType: "weekly-earnings",
+      periodStart: "", // worker computes dynamically from current date
+      periodEnd: "",
     },
     {
-      repeat: { pattern: '0 8 * * 1' }, // cron: Monday 08:00 UTC
-      jobId: 'weekly-earnings-recurring',
+      repeat: { pattern: "0 8 * * 1" }, // cron: Monday 08:00 UTC
+      jobId: "weekly-earnings-recurring",
     },
   );
 
-  logger.info('Job scheduler started — weekly earnings report registered');
+  // Session reminders — every 5 minutes
+  await sessionReminderQueue.add(
+    "session-reminder-scheduled",
+    { jobType: "session-reminder" },
+    {
+      repeat: { pattern: "*/5 * * * *" },
+      jobId: "session-reminder-recurring",
+    },
+  );
+
+  // Hourly escrow eligibility check — releases escrows past the 48h window
+  await escrowCheckQueue.add(
+    "escrow-check-scheduled",
+    { jobType: "escrow-check-cron", triggeredAt: new Date().toISOString() },
+    {
+      repeat: { pattern: "0 * * * *" }, // cron: every hour on the hour
+      jobId: "escrow-check-recurring",
+    },
+  );
+
+  logger.info(
+    "Job scheduler started — weekly earnings report, session reminders, and hourly escrow check registered",
+  );
 }
 
 export async function stopScheduler(): Promise<void> {
   // Remove repeatable jobs on shutdown (optional — comment out to persist across restarts)
   // await reportQueue.removeRepeatable('weekly-earnings-scheduled', { pattern: '0 8 * * 1' });
+  logger.info("Job scheduler stopped");
+  // Notification cleanup — daily at 02:00 UTC (delete expired notifications)
+  await notificationCleanupQueue.add(
+    'notification-cleanup-scheduled',
+    { jobType: 'notification-cleanup' },
+    {
+      repeat: { pattern: '0 2 * * *' },
+      jobId: 'notification-cleanup-recurring',
+    },
+  );
+
+  logger.info('Job scheduler started — weekly earnings, session reminders, notification cleanup registered');
+}
+
+export async function stopScheduler(): Promise<void> {
   logger.info('Job scheduler stopped');
+}
+
+/**
+ * Run periodic maintenance tasks (called externally or via a daily cron).
+ */
+export async function runMaintenanceTasks(): Promise<void> {
+  const expired = await VerificationService.flagExpiredVerifications();
+  if (expired > 0) {
+    logger.info("Maintenance: expired verifications flagged", {
+      count: expired,
+    });
+  }
 }

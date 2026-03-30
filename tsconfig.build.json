@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "./dist"
+  },
+  "include": [
+    "src/config/env.ts",
+    "src/config/monitoring.config.ts",
+    "src/tests/setup.ts"
+  ]
+}

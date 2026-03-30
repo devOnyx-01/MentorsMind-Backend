@@ -9,6 +9,7 @@ export interface UserRecord {
   bio: string | null;
   avatar_url: string | null;
   is_active: boolean;
+  notification_preferences: Record<string, Record<string, boolean>>;
   created_at: Date;
   updated_at: Date;
 }
@@ -26,10 +27,11 @@ export interface UpdateUserPayload {
   firstName?: string;
   lastName?: string;
   bio?: string;
+  notificationPreferences?: Record<string, Record<string, boolean>>;
 }
 
 const PRIVATE_COLUMNS =
-  'id, email, role, first_name, last_name, bio, avatar_url, is_active, created_at, updated_at';
+  'id, email, role, first_name, last_name, bio, avatar_url, is_active, notification_preferences, created_at, updated_at';
 
 const PUBLIC_COLUMNS = 'id, role, first_name, last_name, bio, avatar_url';
 
@@ -66,6 +68,10 @@ export const UsersService = {
     if (payload.bio !== undefined) {
       fields.push(`bio = $${idx++}`);
       values.push(payload.bio);
+    }
+    if (payload.notificationPreferences !== undefined) {
+      fields.push(`notification_preferences = $${idx++}`);
+      values.push(JSON.stringify(payload.notificationPreferences));
     }
 
     if (fields.length === 0) return this.findById(id);

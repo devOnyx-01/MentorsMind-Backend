@@ -3,6 +3,9 @@
  */
 
 import pool from '../config/database';
+import { CacheService } from './cache.service';
+import { CacheKeys, CacheTTL } from '../utils/cache-key.utils';
+import { logger } from '../utils/logger.utils';
 import {
   CreateMentorProfileInput,
   UpdateMentorProfileInput,
@@ -103,18 +106,26 @@ export const MentorsService = {
 
   /**
    * Get mentor profile by ID
+   * Cached for 5 minutes to reduce database load
    */
   async findById(id: string): Promise<MentorRecord | null> {
-    const { rows } = await pool.query<MentorRecord>(
-      `SELECT ${MENTOR_COLUMNS} FROM users
-       WHERE id = $1 AND role = 'mentor' AND is_active = true`,
-      [id],
+    return CacheService.wrap(
+      CacheKeys.mentorProfile(id),
+      CacheTTL.medium,
+      async () => {
+        const { rows } = await pool.query<MentorRecord>(
+          `SELECT ${MENTOR_COLUMNS} FROM users
+           WHERE id = $1 AND role = 'mentor' AND is_active = true`,
+          [id],
+        );
+        return rows[0] ?? null;
+      },
     );
-    return rows[0] ?? null;
   },
 
   /**
    * Update mentor profile
+   * Invalidates the mentor profile cache and mentor list cache
    */
   async update(id: string, payload: UpdateMentorProfileInput): Promise<MentorRecord | null> {
     const fields: string[] = ['updated_at = NOW()'];
@@ -139,77 +150,99 @@ export const MentorsService = {
        RETURNING ${MENTOR_COLUMNS}`,
       values,
     );
+
+    // Invalidate mentor profile cache when profile is updated
+    if (rows[0]) {
+      await CacheService.del(CacheKeys.mentorProfile(id));
+      // Also invalidate mentor search/list caches
+      await CacheService.invalidatePattern('mm:mentors:search:*');
+      await CacheService.invalidatePattern('mm:mentors:*:*');
+      logger.debug('Mentor cache invalidated on profile update', { mentorId: id });
+    }
+
     return rows[0] ?? null;
   },
 
   /**
    * List mentors with filtering and pagination
+   * Cached for 60 seconds based on query parameters to reduce database load
    */
   async list(query: ListMentorsQuery): Promise<MentorListResult> {
-    const { page, limit, search, expertise, minRate, maxRate, isAvailable, sortBy, sortOrder } = query;
-    const offset = (page - 1) * limit;
+    const cacheKey = CacheKeys.mentorSearch(query);
+    
+    return CacheService.wrap(
+      cacheKey,
+      CacheTTL.short,
+      async () => {
+        const { page, limit, search, expertise, minRate, maxRate, isAvailable, sortBy, sortOrder } = query;
+        const offset = (page - 1) * limit;
 
-    const conditions: string[] = ["role = 'mentor'", 'is_active = true'];
-    const values: unknown[] = [];
-    let idx = 1;
+        const conditions: string[] = ["role = 'mentor'", 'is_active = true'];
+        const values: unknown[] = [];
+        let idx = 1;
 
-    if (search) {
-      conditions.push(`(first_name ILIKE $${idx} OR last_name ILIKE $${idx} OR bio ILIKE $${idx})`);
-      values.push(`%${search}%`);
-      idx++;
-    }
-    if (expertise) {
-      conditions.push(`$${idx} = ANY(expertise)`);
-      values.push(expertise);
-      idx++;
-    }
-    if (minRate !== undefined) {
-      conditions.push(`hourly_rate >= $${idx++}`);
-      values.push(minRate);
-    }
-    if (maxRate !== undefined) {
-      conditions.push(`hourly_rate <= $${idx++}`);
-      values.push(maxRate);
-    }
-    if (isAvailable !== undefined) {
-      conditions.push(`is_available = $${idx++}`);
-      values.push(isAvailable);
-    }
+        if (search) {
+          conditions.push(`(first_name ILIKE $${idx} OR last_name ILIKE $${idx} OR bio ILIKE $${idx})`);
+          values.push(`%${search}%`);
+          idx++;
+        }
+        if (expertise) {
+          conditions.push(`$${idx} = ANY(expertise)`);
+          values.push(expertise);
+          idx++;
+        }
+        if (minRate !== undefined) {
+          conditions.push(`hourly_rate >= $${idx++}`);
+          values.push(minRate);
+        }
+        if (maxRate !== undefined) {
+          conditions.push(`hourly_rate <= $${idx++}`);
+          values.push(maxRate);
+        }
+        if (isAvailable !== undefined) {
+          conditions.push(`is_available = $${idx++}`);
+          values.push(isAvailable);
+        }
 
-    const sortColumn: Record<string, string> = {
-      hourlyRate: 'hourly_rate',
-      averageRating: 'average_rating',
-      totalSessions: 'total_sessions_completed',
-      createdAt: 'created_at',
-    };
+        const sortColumn: Record<string, string> = {
+          hourlyRate: 'hourly_rate',
+          averageRating: 'average_rating',
+          totalSessions: 'total_sessions_completed',
+          createdAt: 'created_at',
+        };
 
-    const whereClause = `WHERE ${conditions.join(' AND ')}`;
-    const orderClause = `ORDER BY ${sortColumn[sortBy] ?? 'created_at'} ${sortOrder.toUpperCase()}`;
+        const whereClause = `WHERE ${conditions.join(' AND ')}`;
+        const orderClause = `ORDER BY ${sortColumn[sortBy] ?? 'created_at'} ${sortOrder.toUpperCase()}`;
 
-    const [dataResult, countResult] = await Promise.all([
-      pool.query<MentorRecord>(
-        `SELECT ${MENTOR_COLUMNS} FROM users ${whereClause} ${orderClause} LIMIT $${idx++} OFFSET $${idx++}`,
-        [...values, limit, offset],
-      ),
-      pool.query<{ count: string }>(
-        `SELECT COUNT(*) FROM users ${whereClause}`,
-        values,
-      ),
-    ]);
+        const limitIdx = idx;
+        const offsetIdx = idx + 1;
+        const [dataResult, countResult] = await Promise.all([
+          pool.query<MentorRecord>(
+            `SELECT ${MENTOR_COLUMNS} FROM users ${whereClause} ${orderClause} LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+            [...values, limit, offset],
+          ),
+          pool.query<{ count: string }>(
+            `SELECT COUNT(*) FROM users ${whereClause}`,
+            values,
+          ),
+        ]);
 
-    const total = parseInt(countResult.rows[0].count, 10);
+        const total = parseInt(countResult.rows[0].count, 10);
 
-    return {
-      mentors: dataResult.rows,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    };
+        return {
+          mentors: dataResult.rows,
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit),
+        };
+      },
+    );
   },
 
   /**
    * Set mentor availability schedule
+   * Invalidates the mentor profile cache
    */
   async setAvailability(id: string, payload: SetAvailabilityInput): Promise<MentorRecord | null> {
     const fields: string[] = ['availability_schedule = $1', 'updated_at = NOW()'];
@@ -229,6 +262,13 @@ export const MentorsService = {
        RETURNING ${MENTOR_COLUMNS}`,
       values,
     );
+
+    // Invalidate mentor profile cache
+    if (rows[0]) {
+      await CacheService.del(CacheKeys.mentorProfile(id));
+      logger.debug('Mentor profile cache invalidated on availability update', { mentorId: id });
+    }
+
     return rows[0] ?? null;
   },
 
@@ -247,6 +287,7 @@ export const MentorsService = {
 
   /**
    * Update mentor pricing
+   * Invalidates the mentor profile cache and mentor search caches
    */
   async updatePricing(id: string, payload: UpdatePricingInput): Promise<MentorRecord | null> {
     const { rows } = await pool.query<MentorRecord>(
@@ -255,6 +296,14 @@ export const MentorsService = {
        RETURNING ${MENTOR_COLUMNS}`,
       [payload.hourlyRate, id],
     );
+
+    // Invalidate mentor profile and search caches
+    if (rows[0]) {
+      await CacheService.del(CacheKeys.mentorProfile(id));
+      await CacheService.invalidatePattern('mm:mentors:search:*');
+      logger.debug('Mentor cache invalidated on pricing update', { mentorId: id });
+    }
+
     return rows[0] ?? null;
   },
 
@@ -275,9 +324,11 @@ export const MentorsService = {
 
     const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
+    const sessionLimitIdx = idx;
+    const sessionOffsetIdx = idx + 1;
     const [dataResult, countResult] = await Promise.all([
       pool.query<MentorSessionRecord>(
-        `SELECT * FROM sessions ${whereClause} ORDER BY scheduled_at DESC LIMIT $${idx++} OFFSET $${idx++}`,
+        `SELECT * FROM sessions ${whereClause} ORDER BY scheduled_at DESC LIMIT $${sessionLimitIdx} OFFSET $${sessionOffsetIdx}`,
         [...values, limit, offset],
       ),
       pool.query<{ count: string }>(
@@ -307,8 +358,11 @@ export const MentorsService = {
 
     const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
-    const dateTrunc: Record<string, string> = { day: 'day', week: 'week', month: 'month' };
-    const truncUnit = dateTrunc[groupBy] ?? 'month';
+    const allowedUnits: Record<string, string> = { day: 'day', week: 'week', month: 'month' };
+    const truncUnit = allowedUnits[groupBy];
+    if (!truncUnit) {
+      throw new Error(`Invalid groupBy value: ${groupBy}`);
+    }
 
     const [summaryResult, breakdownResult] = await Promise.all([
       pool.query<{ total_earnings: string; total_sessions: string }>(
@@ -322,15 +376,15 @@ export const MentorsService = {
       ),
       pool.query<{ period: string; earnings: string; sessions: string }>(
         `SELECT
-           DATE_TRUNC('${truncUnit}', s.scheduled_at)::text AS period,
+           DATE_TRUNC($${idx}, s.scheduled_at)::text AS period,
            COALESCE(SUM(u.hourly_rate * (s.duration_minutes / 60.0)), 0) AS earnings,
            COUNT(s.id) AS sessions
          FROM sessions s
          JOIN users u ON u.id = s.mentor_id
          ${whereClause}
-         GROUP BY DATE_TRUNC('${truncUnit}', s.scheduled_at)
+         GROUP BY DATE_TRUNC($${idx}, s.scheduled_at)
          ORDER BY period DESC`,
-        values,
+        [...values, truncUnit],
       ),
     ]);
 
