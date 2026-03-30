@@ -24,9 +24,8 @@ import { initializeModels } from "./models";
 import { createSocketServer } from "./config/socket";
 import { initializeSocketService } from "./services/socket.service";
 import {
-  startStellarStream,
-  stopStellarStream,
-} from "./services/stellar-stream.service";
+  stellarMonitorJob,
+} from "./jobs/stellarMonitor.job";
 import {
   emailWorker,
   paymentWorker,
@@ -41,7 +40,6 @@ import {
   stopScheduler,
 } from "./workers";
 import { initializeEmailTemplates } from "./services/template-initializer.service";
-import { logger } from "./utils/logger";
 import { logger } from "./utils/logger.utils";
 
 // Initialize database tables, then seed email templates
@@ -84,12 +82,14 @@ const io = createSocketServer(server);
 initializeSocketService(io);
 
 // Subscribe to Stellar Horizon SSE for real-time payment confirmations
-startStellarStream();
+stellarMonitorJob.start().catch((err) => {
+  logger.error("Failed to start Horizon SSE monitor", { error: err });
+});
 
 // Graceful shutdown
 async function shutdown(signal: string) {
   logger.info({ signal }, "Signal received: closing HTTP server");
-  stopStellarStream();
+  stellarMonitorJob.stop();
   await Promise.all([
     emailWorker.close(),
     paymentWorker.close(),

@@ -46,6 +46,8 @@ const envSchema = z.object({
   JWT_REFRESH_EXPIRES_IN: z.string().default("30d"),
   /** Previous JWT secret — accepted during rotation window, then removed. */
   JWT_SECRET_PREVIOUS: z.string().optional(),
+  PII_ENCRYPTION_KEYS: z.string().optional(),
+  PII_ENCRYPTION_CURRENT_KEY_VERSION: z.string().optional(),
 
   // Stellar
   STELLAR_NETWORK: z.enum(["testnet", "mainnet"]).default("testnet"),
@@ -133,6 +135,7 @@ const SENSITIVE_KEYS = new Set([
   "JWT_SECRET",
   "JWT_REFRESH_SECRET",
   "JWT_SECRET_PREVIOUS",
+  "PII_ENCRYPTION_KEYS",
   "PLATFORM_SECRET_KEY",
   "SMTP_PASS",
   "GMAIL_PASS",

@@ -93,6 +93,9 @@ router.put(
   asyncHandler(UsersController.updateMe),
 );
 
+router.delete('/me', asyncHandler(UsersController.requestAccountDeletion));
+router.post('/me/cancel-deletion', asyncHandler(UsersController.cancelAccountDeletion));
+
 /**
  * @swagger
  * /users/avatar:

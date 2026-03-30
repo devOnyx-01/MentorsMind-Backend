@@ -23,9 +23,12 @@ import disputesRoutes from "../disputes.routes";
 import escrowRoutes from "../escrow.routes";
 import walletRoutes from "../wallets.routes";
 import consentRoutes from "../consent.routes";
+import integrationsRoutes from "../integrations.routes";
 import { AdminService } from "../../services/admin.service";
 import { BookingsService } from "../../services/bookings.service";
 import { logger } from "../../utils/logger";
+import { VerificationService } from "../../services/verification.service";
+import { notificationCleanupService } from "../../services/notification-cleanup.service";
 
 const router = Router();
 
@@ -59,5 +62,6 @@ router.use("/analytics", analyticsRoutes);
 router.use("/disputes", disputesRoutes);
 router.use("/escrow", escrowRoutes);
 router.use("/wallets", walletRoutes);
+router.use("/integrations", integrationsRoutes);
 
 export default router;

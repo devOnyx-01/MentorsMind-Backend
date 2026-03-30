@@ -93,6 +93,7 @@ class StellarService {
     publicKey: string,
     onPayment: PaymentHandler,
     cursor: string = 'now',
+    onStreamError?: (error: unknown) => void,
   ): () => void {
     logger.info('stellar.streamPayments started', { publicKey, cursor });
 
@@ -108,6 +109,10 @@ class StellarService {
             type: record.type,
             createdAt: record.created_at,
             transactionHash: record.transaction_hash,
+            ledgerSequence:
+              (record as any).transaction_attr?.ledger ??
+              (record as any).ledger_attr ??
+              undefined,
             from: record.from,
             to: record.to,
             assetType: record.asset_type,
@@ -122,6 +127,7 @@ class StellarService {
             publicKey,
             error: error instanceof Error ? error.message : error,
           });
+          onStreamError?.(error);
         },
       } as any);
 
