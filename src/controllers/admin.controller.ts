@@ -2,7 +2,9 @@ import { Response } from "express";
 import { AuthenticatedRequest } from "../types/api.types";
 import { AdminService } from "../services/admin.service";
 import { ResponseUtil } from "../utils/response.utils";
-import { AuditLogService } from "../services/auditLog.service";
+import { AuditLogService, extractIpAddress } from "../services/auditLog.service";
+import { LoginAttemptsService } from "../services/loginAttempts.service";
+import pool from "../config/database";
 
 export const AdminController = {
   /** GET /admin/stats */
@@ -302,5 +304,36 @@ export const AdminController = {
 
     const stats = await AuditLogService.getStats(startDate, endDate);
     ResponseUtil.success(res, stats, "Audit log statistics retrieved successfully");
+  },
+
+  /** POST /admin/users/:id/unlock — clear login lockout for a user */
+  async unlockUser(req: AuthenticatedRequest, res: Response): Promise<void> {
+    const userId = req.params.id as string;
+
+    // Look up the user's email so we can clear the Redis key
+    const { rows } = await pool.query<{ email: string; is_active: boolean }>(
+      `SELECT email, is_active FROM users WHERE id = $1`,
+      [userId],
+    );
+
+    if (rows.length === 0) {
+      ResponseUtil.notFound(res, 'User not found');
+      return;
+    }
+
+    const { email } = rows[0];
+    await LoginAttemptsService.adminUnlock(email);
+
+    await AuditLogService.log({
+      userId: req.user!.id,
+      action: 'ACCOUNT_UNLOCKED',
+      resourceType: 'user',
+      resourceId: userId,
+      ipAddress: extractIpAddress(req),
+      userAgent: req.headers['user-agent'] || null,
+      metadata: { unlockedEmail: email },
+    });
+
+    ResponseUtil.success(res, { userId, email }, 'Account unlocked successfully');
   },
 };

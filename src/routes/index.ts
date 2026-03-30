@@ -23,6 +23,7 @@ import { asyncHandler } from "../utils/asyncHandler.utils";
 import { HealthController } from "../controllers/health.controller";
 import { HealthService } from "../services/health.service";
 import { logger } from "../utils/logger.utils";
+import { JwksController } from "../controllers/jwks.controller";
 
 const router = Router();
 
@@ -58,6 +59,9 @@ router.use("/payments", paymentsRoutes);
 router.use("/reviews", reviewsRoutes);
 router.use("/conversations", conversationsRoutes);
 router.use("/messages", messageSearchRoutes);
+
+// JWKS public endpoint — no auth required
+router.get("/.well-known/jwks.json", asyncHandler(JwksController.getJwks));
 
 // ── Root info ────────────────────────────────────────────────────────────────
 /**

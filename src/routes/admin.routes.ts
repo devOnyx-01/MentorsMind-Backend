@@ -177,6 +177,44 @@ router.put("/users/:id/unsuspend", asyncHandler(AdminController.unsuspendUser));
 
 /**
  * @swagger
+ * /admin/users/{id}/unlock:
+ *   post:
+ *     summary: Unlock a permanently or temporarily locked account
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - $ref: '#/components/schemas/UUIDParam'
+ *     responses:
+ *       200:
+ *         description: Account unlocked
+ *       404:
+ *         description: User not found
+ */
+router.post("/users/:id/unlock", asyncHandler(AdminController.unlockUser));
+
+/**
+ * @swagger
+ * /admin/auth/rotate-keys:
+ *   post:
+ *     summary: Rotate JWT signing key pair (zero-downtime)
+ *     description: >
+ *       Generates a new RSA-256 key pair. The current key is demoted to
+ *       "previous" and remains valid for 24 hours so existing tokens keep
+ *       working. After 24 hours the previous key is rejected.
+ *     tags: [Admin, Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Keys rotated — returns new and previous kid values
+ *       403:
+ *         description: Admin role required
+ */
+router.post("/auth/rotate-keys", asyncHandler(JwksController.rotateKeys));
+
+/**
+ * @swagger
  * /admin/transactions:
  *   get:
  *     summary: List all platform transactions

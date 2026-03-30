@@ -52,6 +52,13 @@ initializeModels()
     console.error("Failed to initialize models:", err);
   });
 
+// Initialize JWKS key store (generates RSA key pair if none exists)
+import("./services/jwks.service").then(({ JwksService }) =>
+  JwksService.initialize().catch((err) =>
+    logger.error("Failed to initialize JWKS key store", { error: err }),
+  ),
+);
+
 // Start background job workers and scheduler
 startScheduler().catch((err) => {
   logger.error("Failed to start job scheduler", { error: err });

@@ -9,6 +9,8 @@ import {
   buildRateLimitEvent,
   logRateLimitEvent,
 } from '../utils/rate-limit.utils';
+import { LoginAttemptsService } from '../services/loginAttempts.service';
+import { extractIpAddress } from '../services/auditLog.service';
 
 // ─── Core Factory ─────────────────────────────────────────────────────────────
 
@@ -110,3 +112,40 @@ export const publicLimiter = createLimiter({
 
 /** Factory for custom per-route limiters */
 export { createLimiter };
+
+/**
+ * Middleware that checks account lockout status before the login handler runs.
+ * Reads the email from req.body and returns 429 if the account is locked.
+ * This runs independently of the sliding-window IP rate limiter.
+ */
+export async function loginLockoutCheck(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const email = req.body?.email as string | undefined;
+  if (!email) {
+    next();
+    return;
+  }
+
+  const status = await LoginAttemptsService.getStatus(email);
+
+  if (status.locked) {
+    if (status.permanent) {
+      res.status(429).json({
+        success: false,
+        error: 'Account permanently locked due to too many failed attempts. Contact support.',
+        captcha_required: true,
+      });
+      return;
+    }
+
+    res.setHeader('Retry-After', String(status.retryAfter ?? 900));
+    res.status(429).json({
+      success: false,
+      error: 'Account temporarily locked. Too many failed login attempts.',
+      retry_after: status.retryAfter,
+      captcha_required: true,
+    });
+    return;
+  }
+
+  next();
+}
