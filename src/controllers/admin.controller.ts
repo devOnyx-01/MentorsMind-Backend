@@ -5,6 +5,8 @@ import { ResponseUtil } from "../utils/response.utils";
 import { AuditLogService, extractIpAddress } from "../services/auditLog.service";
 import { LoginAttemptsService } from "../services/loginAttempts.service";
 import pool from "../config/database";
+import { keyRotationJob } from "../jobs/keyRotation.job";
+import { accountDeletionService } from "../services/accountDeletion.service";
 
 export const AdminController = {
   /** GET /admin/stats */
@@ -234,6 +236,22 @@ export const AdminController = {
 
     await AdminService.updateConfig(key, value);
     ResponseUtil.success(res, null, "Configuration updated successfully");
+  },
+
+  async rotateEncryptionKey(
+    _req: AuthenticatedRequest,
+    res: Response,
+  ): Promise<void> {
+    const result = await keyRotationJob.run();
+    ResponseUtil.success(res, result, "Encryption key rotation job completed");
+  },
+
+  async listDeletionRequests(
+    _req: AuthenticatedRequest,
+    res: Response,
+  ): Promise<void> {
+    const requests = await accountDeletionService.listDeletionRequests();
+    ResponseUtil.success(res, { requests }, "Deletion requests retrieved successfully");
   },
 
   /** GET /admin/audit-log */

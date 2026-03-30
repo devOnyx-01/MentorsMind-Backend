@@ -29,6 +29,7 @@ export interface StellarPaymentRecord {
   type: string;
   createdAt: string;
   transactionHash: string;
+  ledgerSequence?: number;
   from: string;
   to: string;
   assetType: string;

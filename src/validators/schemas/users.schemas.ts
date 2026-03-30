@@ -13,6 +13,10 @@ export const updateUserSchema = z.object({
         lastName: nameSchema.optional(),
         bio: longTextSchema.optional(),
         avatarUrl: urlSchema.optional(),
+        phoneNumber: z.string().trim().max(50).nullable().optional(),
+        dateOfBirth: z.string().trim().max(20).nullable().optional(),
+        governmentIdNumber: z.string().trim().max(100).nullable().optional(),
+        bankAccountDetails: z.string().trim().max(255).nullable().optional(),
     }).strict(),
 });
 
@@ -22,6 +26,10 @@ export const updateMeSchema = z.object({
         lastName: nameSchema.optional(),
         bio: longTextSchema.optional(),
         avatarUrl: urlSchema.optional(),
+        phoneNumber: z.string().trim().max(50).nullable().optional(),
+        dateOfBirth: z.string().trim().max(20).nullable().optional(),
+        governmentIdNumber: z.string().trim().max(100).nullable().optional(),
+        bankAccountDetails: z.string().trim().max(255).nullable().optional(),
     }).strict(),
 });
 

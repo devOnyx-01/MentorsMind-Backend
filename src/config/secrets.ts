@@ -29,7 +29,11 @@ export interface AppSecrets {
   DB_PASSWORD: string;
   SMTP_PASS?: string;
   PLATFORM_SECRET_KEY?: string;
+  PII_ENCRYPTION_KEYS?: string;
+  PII_ENCRYPTION_CURRENT_KEY_VERSION?: string;
 }
+
+let cachedSecrets: AppSecrets | null = null;
 
 // ---------------------------------------------------------------------------
 // AWS Secrets Manager
@@ -76,6 +80,58 @@ async function fetchFromVault(
   return (json.data?.data ?? json.data) as AppSecrets;
 }
 
+function getEnvSecrets(): AppSecrets {
+  return {
+    JWT_SECRET: process.env.JWT_SECRET || "",
+    JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || "",
+    JWT_SECRET_PREVIOUS: process.env.JWT_SECRET_PREVIOUS,
+    DB_PASSWORD: process.env.DB_PASSWORD || "",
+    SMTP_PASS: process.env.SMTP_PASS,
+    PLATFORM_SECRET_KEY: process.env.PLATFORM_SECRET_KEY,
+    PII_ENCRYPTION_KEYS: process.env.PII_ENCRYPTION_KEYS,
+    PII_ENCRYPTION_CURRENT_KEY_VERSION:
+      process.env.PII_ENCRYPTION_CURRENT_KEY_VERSION,
+  };
+}
+
+export async function resolveAppSecrets(forceRefresh = false): Promise<AppSecrets> {
+  if (!forceRefresh && cachedSecrets) {
+    return cachedSecrets;
+  }
+
+  const provider = (process.env.SECRETS_PROVIDER || "env") as SecretsProvider;
+
+  if (provider === "env") {
+    cachedSecrets = getEnvSecrets();
+    return cachedSecrets;
+  }
+
+  let secrets: AppSecrets;
+
+  if (provider === "aws") {
+    const secretId = process.env.AWS_SECRET_ID;
+    if (!secretId) {
+      throw new Error("AWS_SECRET_ID is required when SECRETS_PROVIDER=aws");
+    }
+    secrets = await fetchFromAws(secretId);
+  } else if (provider === "vault") {
+    const vaultAddr = process.env.VAULT_ADDR;
+    const vaultToken = process.env.VAULT_TOKEN;
+    const secretPath = process.env.VAULT_SECRET_PATH;
+    if (!vaultAddr || !vaultToken || !secretPath) {
+      throw new Error(
+        "VAULT_ADDR, VAULT_TOKEN, and VAULT_SECRET_PATH are required when SECRETS_PROVIDER=vault",
+      );
+    }
+    secrets = await fetchFromVault(vaultAddr, vaultToken, secretPath);
+  } else {
+    throw new Error(`Unknown SECRETS_PROVIDER: "${provider}"`);
+  }
+
+  cachedSecrets = secrets;
+  return secrets;
+}
+
 // ---------------------------------------------------------------------------
 // Public: loadSecrets
 // ---------------------------------------------------------------------------
@@ -97,28 +153,7 @@ export async function loadSecrets(): Promise<void> {
   }
 
   try {
-    let secrets: AppSecrets;
-
-    if (provider === "aws") {
-      const secretId = process.env.AWS_SECRET_ID;
-      if (!secretId)
-        throw new Error("AWS_SECRET_ID is required when SECRETS_PROVIDER=aws");
-      logger.info({ secretId }, "Loading secrets from AWS Secrets Manager");
-      secrets = await fetchFromAws(secretId);
-    } else if (provider === "vault") {
-      const vaultAddr = process.env.VAULT_ADDR;
-      const vaultToken = process.env.VAULT_TOKEN;
-      const secretPath = process.env.VAULT_SECRET_PATH;
-      if (!vaultAddr || !vaultToken || !secretPath) {
-        throw new Error(
-          "VAULT_ADDR, VAULT_TOKEN, and VAULT_SECRET_PATH are required when SECRETS_PROVIDER=vault",
-        );
-      }
-      logger.info({ secretPath }, "Loading secrets from HashiCorp Vault");
-      secrets = await fetchFromVault(vaultAddr, vaultToken, secretPath);
-    } else {
-      throw new Error(`Unknown SECRETS_PROVIDER: "${provider}"`);
-    }
+    const secrets = await resolveAppSecrets(true);
 
     // Merge into process.env — only overwrite if the secret is non-empty
     const SENSITIVE_KEYS: (keyof AppSecrets)[] = [
@@ -128,6 +163,8 @@ export async function loadSecrets(): Promise<void> {
       "DB_PASSWORD",
       "SMTP_PASS",
       "PLATFORM_SECRET_KEY",
+      "PII_ENCRYPTION_KEYS",
+      "PII_ENCRYPTION_CURRENT_KEY_VERSION",
     ];
 
     for (const key of SENSITIVE_KEYS) {

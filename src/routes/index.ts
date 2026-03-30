@@ -11,6 +11,7 @@ import paymentsRoutes from "./payments.routes";
 import reviewsRoutes from "./reviews.routes";
 import conversationsRoutes from "./conversations.routes";
 import messageSearchRoutes from "./messageSearch.routes";
+import integrationsRoutes from "./integrations.routes";
 import { AdminService } from "../services/admin.service";
 import { BookingsService } from "../services/bookings.service";
 import { VerificationService } from "../services/verification.service";
@@ -59,6 +60,7 @@ router.use("/payments", paymentsRoutes);
 router.use("/reviews", reviewsRoutes);
 router.use("/conversations", conversationsRoutes);
 router.use("/messages", messageSearchRoutes);
+router.use("/integrations", integrationsRoutes);
 
 // JWKS public endpoint — no auth required
 router.get("/.well-known/jwks.json", asyncHandler(JwksController.getJwks));

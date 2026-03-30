@@ -16,6 +16,7 @@ import {
 } from "../validators/schemas/verification.schemas";
 import { ConsentController } from "../controllers/consent.controller";
 import { refreshAnalyticsJob } from "../jobs/refreshAnalytics.job";
+import { JwksController } from "../controllers/jwks.controller";
 
 const router = Router();
 
@@ -212,6 +213,14 @@ router.post("/users/:id/unlock", asyncHandler(AdminController.unlockUser));
  *         description: Admin role required
  */
 router.post("/auth/rotate-keys", asyncHandler(JwksController.rotateKeys));
+router.post(
+  "/security/rotate-encryption-key",
+  asyncHandler(AdminController.rotateEncryptionKey),
+);
+router.get(
+  "/deletion-requests",
+  asyncHandler(AdminController.listDeletionRequests),
+);
 
 /**
  * @swagger
