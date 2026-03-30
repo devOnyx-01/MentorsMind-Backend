@@ -3,6 +3,7 @@ import rateLimit from 'express-rate-limit';
 import { AuthController } from '../controllers/auth.controller';
 import { SessionsController } from '../controllers/sessions.controller';
 import { MfaController } from '../controllers/mfa.controller';
+import { OAuthController } from '../controllers/oauth.controller';
 import { authenticate } from '../middleware/auth.middleware';
 import { asyncHandler } from '../utils/asyncHandler.utils';
 import { loginLockoutCheck } from '../middleware/rate-limit.middleware';
@@ -43,5 +44,13 @@ router.post('/mfa/disable', authenticate, asyncHandler(MfaController.disable));
 router.get('/sessions', authenticate, asyncHandler(SessionsController.listSessions));
 router.delete('/sessions', authenticate, asyncHandler(SessionsController.revokeAllSessions));
 router.delete('/sessions/:id', authenticate, asyncHandler(SessionsController.revokeSession));
+
+// OAuth routes
+router.get('/google', asyncHandler(OAuthController.googleAuth));
+router.get('/google/callback', asyncHandler(OAuthController.googleCallback));
+router.get('/github', asyncHandler(OAuthController.githubAuth));
+router.get('/github/callback', asyncHandler(OAuthController.githubCallback));
+router.get('/oauth/providers', authenticate, asyncHandler(OAuthController.getLinkedProviders));
+router.delete('/oauth/:provider', authenticate, asyncHandler(OAuthController.unlinkProvider));
 
 export default router;

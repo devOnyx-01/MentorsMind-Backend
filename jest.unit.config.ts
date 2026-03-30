@@ -46,8 +46,10 @@ const config: Config = {
     ],
   },
   moduleNameMapper: {
+    "^@/(.*)$": "<rootDir>/src/$1",
     "^uuid$": "<rootDir>/src/tests/mocks/uuid.ts",
   },
+  setupFilesAfterEnv: ["<rootDir>/src/tests/jest.setup.ts"],
   clearMocks: true,
   resetModules: true,
   restoreMocks: true,

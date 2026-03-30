@@ -336,4 +336,34 @@ export const AdminController = {
 
     ResponseUtil.success(res, { userId, email }, 'Account unlocked successfully');
   },
+
+  /** POST /admin/email/preview/:template — preview rendered email template */
+  async previewEmailTemplate(req: AuthenticatedRequest, res: Response): Promise<void> {
+    const templateName = req.params.template as string;
+    const sampleData = req.body || {};
+
+    if (!templateName) {
+      ResponseUtil.error(res, 'Template name is required', 400);
+      return;
+    }
+
+    try {
+      // Import template engine service
+      const { TemplateEngineService } = await import('../services/template-engine.service');
+
+      // Render the template with sample data
+      const rendered = await TemplateEngineService.renderEmail(templateName, sampleData);
+
+      ResponseUtil.success(res, {
+        template: templateName,
+        subject: rendered.subject,
+        html: rendered.htmlContent,
+        text: rendered.textContent,
+        sampleData,
+      }, 'Email template preview generated successfully');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      ResponseUtil.error(res, `Failed to preview template: ${errorMessage}`, 500);
+    }
+  },
 };

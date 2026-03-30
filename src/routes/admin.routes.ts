@@ -580,6 +580,104 @@ router.get(
  */
 router.get("/audit-log/stats", asyncHandler(AdminController.getAuditLogStats));
 
+// ── Email Template Routes ──────────────────────────────────────────────────────
+
+/**
+ * @swagger
+ * /admin/email/preview/{template}:
+ *   post:
+ *     summary: Preview rendered email template
+ *     description: Render an email template with sample data for preview purposes
+ *     tags: [Admin, Email]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: template
+ *         in: path
+ *         required: true
+ *         schema: { type: string }
+ *         description: Template name (e.g., welcome, booking-confirmed, payment-received)
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             additionalProperties: true
+ *           example:
+ *             userName: "John Doe"
+ *             mentorName: "Jane Smith"
+ *             sessionDate: "2024-03-15"
+ *             sessionTime: "10:00 AM"
+ *     responses:
+ *       200:
+ *         description: Rendered template preview
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/ApiResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       type: object
+ *                       properties:
+ *                         template: { type: string }
+ *                         subject: { type: string }
+ *                         html: { type: string }
+ *                         text: { type: string }
+ *       400:
+ *         description: Template name is required
+ *       500:
+ *         description: Failed to render template
+ */
+router.post("/email/preview/:template", asyncHandler(AdminController.previewEmailTemplate));
+
+// ── Audit Log Routes ─────────────────────────────────────────────────────────
+
+/**
+ * @swagger
+ * /admin/audit-log:
+ *   get:
+ *     summary: Query audit logs with filtering and pagination
+ *     tags: [Admin, Audit]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: page
+ *         in: query
+ *         schema: { type: integer, default: 1 }
+ *       - name: limit
+ *         in: query
+ *         schema: { type: integer, default: 50 }
+ *       - name: userId
+ *         in: query
+ *         schema: { type: string, format: uuid }
+ *         description: Filter by user ID
+ *       - name: action
+ *         in: query
+ *         schema: { type: string }
+ *         description: Filter by action type
+ *       - name: resourceType
+ *         in: query
+ *         schema: { type: string }
+ *         description: Filter by resource type
+ *       - name: startDate
+ *         in: query
+ *         schema: { type: string, format: date-time }
+ *       - name: endDate
+ *         in: query
+ *         schema: { type: string, format: date-time }
+ *     responses:
+ *       200:
+ *         description: Paginated audit logs
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiResponse'
+ */
+router.get("/audit-log", asyncHandler(AdminController.getAuditLogs));
+
 // ── Analytics Routes ─────────────────────────────────────────────────────────
 
 /**
