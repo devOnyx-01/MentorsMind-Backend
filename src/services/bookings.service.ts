@@ -7,6 +7,7 @@ import { calculateEndTime, calculateRefundEligibility } from '../utils/booking-c
 import { SocketService } from './socket.service';
 import { SorobanEscrowService } from './sorobanEscrow.service';
 import pool from '../config/database';
+import videoSessionService from "./videoSession.service";
 
 export interface CreateBookingData {
   menteeId: string;
@@ -134,7 +135,7 @@ export const BookingsService = {
 
   async getBookingById(bookingId: string, userId: string): Promise<BookingRecord> {
     const booking = await BookingModel.findById(bookingId);
-    
+
     if (!booking) {
       throw createError('Booking not found', 404);
     }
@@ -152,7 +153,7 @@ export const BookingsService = {
     filters?: { status?: string; page?: number; limit?: number }
   ): Promise<{ bookings: BookingRecord[]; total: number }> {
     const cacheKey = CacheKeys.sessionList(userId);
-    
+
     // Try to get from cache first
     const cached = await CacheService.get<{ bookings: BookingRecord[]; total: number }>(cacheKey);
     if (cached !== null) {
@@ -162,7 +163,7 @@ export const BookingsService = {
 
     // Not in cache, fetch from database
     const result = await BookingModel.findByUserId(userId, filters);
-    
+
     // Cache the result for 30 seconds
     await CacheService.set(cacheKey, result, CacheTTL.veryShort);
 
@@ -253,7 +254,7 @@ export const BookingsService = {
     }
 
     const updated = await BookingModel.update(bookingId, { status: 'confirmed' });
-    
+
     if (!updated) {
       throw createError('Failed to confirm booking', 500);
     }
@@ -285,6 +286,17 @@ export const BookingsService = {
     });
 
     return updated;
+
+    const room = await videoSessionService.createRoom(booking);
+
+    const mentorToken = await videoSessionService.generateToken(
+      room.name,
+      "mentor"
+    );
+
+    const learnerToken = await videoSessionService.generateToken(
+      room.name,
+      "learner"
   },
 
   async completeBooking(bookingId: string, userId: string): Promise<BookingRecord> {
@@ -321,7 +333,7 @@ export const BookingsService = {
     }
 
     const updated = await BookingModel.update(bookingId, { status: 'completed' });
-    
+
     if (!updated) {
       throw createError('Failed to complete booking', 500);
     }

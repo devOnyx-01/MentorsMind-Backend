@@ -3,6 +3,10 @@ import { BookingsController } from "../controllers/bookings.controller";
 import { authenticate } from "../middleware/auth.middleware";
 import { requireRole } from "../middleware/rbac.middleware";
 import { idempotency } from "../middleware/idempotency.middleware";
+import {
+  getMeetingLink,
+  regenerateMeetingLink,
+} from "../controllers/meetingLink.controller";
 
 const router = Router();
 
@@ -32,7 +36,8 @@ const router = Router();
  *         description: Booking created
  */
 router.post("/", authenticate, idempotency, BookingsController.createBooking);
-
+router.get("/:id/meeting-link", getMeetingLink);
+router.post("/:id/meeting-link/regenerate", regenerateMeetingLink);
 /**
  * @swagger
  * /api/v1/bookings:
