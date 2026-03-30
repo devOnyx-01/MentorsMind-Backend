@@ -11,6 +11,7 @@ import { generalLimiter } from './middleware/rate-limit.middleware';
 import { errorHandler } from './middleware/errorHandler';
 import { notFoundHandler } from './middleware/notFoundHandler';
 import { swaggerOptions } from './config/swagger';
+import { blocklistMiddleware } from './middleware/ipFilter.middleware';
 import routes from './routes';
 import v1Router from './routes/v1';
 import v2Router from './routes/v2';
@@ -25,6 +26,7 @@ const { apiVersion } = config.server;
 const resolvedApiVersion = apiVersion || CURRENT_VERSION;
 
 // Correlation ID must be first so all downstream middleware/handlers have access
+app.use(blocklistMiddleware);
 app.use(correlationIdMiddleware);
 app.use(requestIdMiddleware);
 

@@ -4,6 +4,7 @@ import { AdminService } from "../services/admin.service";
 import { ResponseUtil } from "../utils/response.utils";
 import { AuditLogService, extractIpAddress } from "../services/auditLog.service";
 import { LoginAttemptsService } from "../services/loginAttempts.service";
+import { IpFilterService } from "../services/ipFilter.service";
 import pool from "../config/database";
 
 export const AdminController = {
@@ -335,5 +336,70 @@ export const AdminController = {
     });
 
     ResponseUtil.success(res, { userId, email }, 'Account unlocked successfully');
+  },
+
+  /** POST /admin/security/blocklist */
+  async addBlocklistRule(req: AuthenticatedRequest, res: Response): Promise<void> {
+    const { ipRange, reason } = req.body;
+    if (!ipRange) {
+        ResponseUtil.error(res, "ipRange is required", 400);
+        return;
+    }
+
+    try {
+        const rule = await IpFilterService.addRule({
+            ipRange,
+            ruleType: 'block',
+            context: 'global',
+            reason,
+            adminId: req.user!.id,
+            ipAddress: extractIpAddress(req),
+        });
+        ResponseUtil.success(res, rule, "IP successfully blocked", 201);
+    } catch (err: any) {
+        ResponseUtil.error(res, err.message, 400);
+    }
+  },
+
+  /** DELETE /admin/security/blocklist/:id */
+  async removeBlocklistRule(req: AuthenticatedRequest, res: Response): Promise<void> {
+    const { id } = req.params;
+    const removed = await IpFilterService.removeRule(id as string, req.user!.id, extractIpAddress(req));
+    
+    if (!removed) {
+        ResponseUtil.notFound(res, "IP rule not found");
+        return;
+    }
+    ResponseUtil.success(res, null, "IP rule successfully removed");
+  },
+
+  /** GET /admin/security/blocklist */
+  async listBlocklistRules(req: AuthenticatedRequest, res: Response): Promise<void> {
+    const rules = await IpFilterService.getRules();
+    const blocklist = rules.filter(r => r.rule_type === 'block' && r.context === 'global');
+    ResponseUtil.success(res, blocklist, "Blocklist retrieved successfully");
+  },
+
+  /** POST /admin/security/allowlist */
+  async addAdminAllowlistRule(req: AuthenticatedRequest, res: Response): Promise<void> {
+    const { ipRange, reason } = req.body;
+    if (!ipRange) {
+        ResponseUtil.error(res, "ipRange is required", 400);
+        return;
+    }
+
+    try {
+        const rule = await IpFilterService.addRule({
+            ipRange,
+            ruleType: 'allow',
+            context: 'admin',
+            reason,
+            adminId: req.user!.id,
+            ipAddress: extractIpAddress(req),
+        });
+        ResponseUtil.success(res, rule, "Admin allowlist rule added successfully", 201);
+    } catch (err: any) {
+        ResponseUtil.error(res, err.message, 400);
+    }
   },
 };
