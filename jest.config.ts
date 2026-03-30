@@ -1,29 +1,31 @@
-import type { Config } from 'jest';
+import type { Config } from "jest";
 
 const config: Config = {
   // Use ts-jest for TypeScript support
-  preset: 'ts-jest',
+  preset: "ts-jest",
 
   // Test environment
-  testEnvironment: 'node',
+  testEnvironment: "node",
 
   // Root directory for tests
-  rootDir: '.',
+  rootDir: ".",
 
   // Where to find test files
-  roots: ['<rootDir>/src'],
-  testMatch: ['**/__tests__/**/*.test.ts'],
+  roots: ["<rootDir>/src"],
+  testMatch: ["**/__tests__/**/*.test.ts"],
+  // Integration tests have their own config (jest.integration.config.ts)
+  testPathIgnorePatterns: ["/node_modules/", "\\.integration\\.test\\.ts$"],
 
   // Coverage configuration
   collectCoverageFrom: [
-    'src/**/*.ts',
-    '!src/**/*.d.ts',
-    '!src/**/index.ts',
-    '!src/tests/**',
-    '!src/docs/**',
+    "src/**/*.ts",
+    "!src/**/*.d.ts",
+    "!src/**/index.ts",
+    "!src/tests/**",
+    "!src/docs/**",
   ],
-  coverageDirectory: 'coverage',
-  coverageReporters: ['text', 'lcov', 'html', 'json-summary'],
+  coverageDirectory: "coverage",
+  coverageReporters: ["text", "lcov", "html", "json-summary"],
   coverageThreshold: {
     global: {
       branches: 70,
@@ -34,17 +36,17 @@ const config: Config = {
   },
 
   // Module file extensions
-  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
+  moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json", "node"],
 
   // Transform configuration
   transform: {
-    '^.+\\.ts$': [
-      'ts-jest',
+    "^.+\\.ts$": [
+      "ts-jest",
       {
         tsconfig: {
-          target: 'ES2022',
-          module: 'commonjs',
-          lib: ['ES2022'],
+          target: "ES2022",
+          module: "commonjs",
+          lib: ["ES2022"],
           strict: false,
           esModuleInterop: true,
           skipLibCheck: true,
@@ -57,7 +59,7 @@ const config: Config = {
   },
 
   // Setup files
-  setupFilesAfterEnv: ['<rootDir>/src/tests/setup.ts'],
+  setupFilesAfterEnv: ["<rootDir>/src/tests/setup.ts"],
 
   // Clear mocks between tests
   clearMocks: true,
@@ -82,8 +84,8 @@ const config: Config = {
 
   // Map imports
   moduleNameMapper: {
-    '^@/(.*)$': '<rootDir>/src/$1',
-    '^uuid$': '<rootDir>/src/tests/mocks/uuid.ts',
+    "^@/(.*)$": "<rootDir>/src/$1",
+    "^uuid$": "<rootDir>/src/tests/mocks/uuid.ts",
   },
 };
 
