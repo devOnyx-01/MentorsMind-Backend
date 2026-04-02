@@ -4,7 +4,7 @@
  */
 
 import { z } from 'zod';
-import { idParamSchema, nameSchema, longTextSchema, urlSchema } from './common.schemas';
+import { idParamSchema, nameSchema, longTextSchema, urlSchema, cursorPaginationSchema } from './common.schemas';
 
 // ---------------------------------------------------------------------------
 // Reusable building blocks
@@ -72,6 +72,19 @@ export const updateMentorProfileSchema = z.object({
 });
 
 export const listMentorsSchema = z.object({
+  query: cursorPaginationSchema.shape.query.extend({
+    search: z.string().trim().max(200).optional(),
+    expertise: z.string().trim().max(100).optional(),
+    minRate: z.string().optional().transform((v) => (v ? parseFloat(v) : undefined)),
+    maxRate: z.string().optional().transform((v) => (v ? parseFloat(v) : undefined)),
+    isAvailable: z.string().optional().transform((v) => v === 'true' ? true : v === 'false' ? false : undefined),
+    sortBy: z.enum(['hourlyRate', 'averageRating', 'totalSessions', 'createdAt']).optional().default('createdAt'),
+    sortOrder: z.enum(['asc', 'desc']).optional().default('desc'),
+  }),
+});
+
+/** Backward-compatible schema for search */
+export const listMentorsSearchSchema = z.object({
   query: z.object({
     page: z.string().optional().transform((v) => (v ? parseInt(v, 10) : 1)),
     limit: z.string().optional().transform((v) => (v ? parseInt(v, 10) : 10)),
@@ -103,9 +116,7 @@ export const updatePricingSchema = z.object({
 
 export const getMentorSessionsSchema = z.object({
   params: idParamSchema.shape.params,
-  query: z.object({
-    page: z.string().optional().transform((v) => (v ? parseInt(v, 10) : 1)),
-    limit: z.string().optional().transform((v) => (v ? parseInt(v, 10) : 10)),
+  query: cursorPaginationSchema.shape.query.extend({
     status: z.enum(['pending', 'confirmed', 'completed', 'cancelled']).optional(),
     from: z.string().datetime({ offset: true }).optional(),
     to: z.string().datetime({ offset: true }).optional(),
@@ -138,6 +149,7 @@ export const submitVerificationSchema = z.object({
 export type CreateMentorProfileInput = z.infer<typeof createMentorProfileSchema>['body'];
 export type UpdateMentorProfileInput = z.infer<typeof updateMentorProfileSchema>['body'];
 export type ListMentorsQuery = z.infer<typeof listMentorsSchema>['query'];
+export type ListMentorsSearchQuery = z.infer<typeof listMentorsSearchSchema>['query'];
 export type SetAvailabilityInput = z.infer<typeof setAvailabilitySchema>['body'];
 export type UpdatePricingInput = z.infer<typeof updatePricingSchema>['body'];
 export type GetMentorSessionsQuery = z.infer<typeof getMentorSessionsSchema>['query'];

@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import pool from '../config/database';
 import { logger } from '../utils/logger';
 import { EmailService } from './email.service';
+import { PaginationUtil } from '../utils/pagination.utils';
 
 const SESSION_EXPIRY_DAYS = 30;
 
@@ -79,19 +80,49 @@ export const SessionManagerService = {
   },
 
   /**
-   * List all active (non-revoked, non-expired) sessions for a user.
+   * List all active (non-revoked, non-expired) sessions for a user with cursor pagination.
    */
-  async listSessions(userId: string): Promise<UserSession[]> {
-    const { rows } = await pool.query<UserSession>(
-      `SELECT id, user_id, device_name, ip_address, user_agent, last_active_at, created_at, expires_at
-       FROM user_sessions
-       WHERE user_id = $1
-         AND revoked_at IS NULL
-         AND expires_at > NOW()
-       ORDER BY last_active_at DESC`,
-      [userId],
-    );
-    return rows;
+  async listSessions(userId: string, filters: { cursor?: string; limit?: number }): Promise<{ sessions: UserSession[]; next_cursor: string | null; has_more: boolean; total: number }> {
+    const limit = filters.limit ?? 20;
+
+    const conditions: string[] = ['user_id = $1', 'revoked_at IS NULL', 'expires_at > NOW()'];
+    const params: unknown[] = [userId];
+    let idx = 2;
+
+    if (filters.cursor) {
+      const decoded = PaginationUtil.decodeCursor(filters.cursor);
+      if (decoded) {
+        // sessions are sorted by last_active_at DESC
+        conditions.push(`(last_active_at, id) < ($${idx}, $${idx + 1})`);
+        params.push(decoded.created_at, decoded.id);
+        idx += 2;
+      }
+    }
+
+    const [{ rows }, { rows: countRows }] = await Promise.all([
+      pool.query<UserSession>(
+        `SELECT id, user_id, device_name, ip_address, user_agent, last_active_at, created_at, expires_at
+         FROM user_sessions
+         WHERE ${conditions.join(' AND ')}
+         ORDER BY last_active_at DESC, id DESC
+         LIMIT $${idx}`,
+        [...params, limit + 1],
+      ),
+      pool.query(`SELECT COUNT(*) FROM user_sessions WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > NOW()`, [userId]),
+    ]);
+
+    const has_more = rows.length > limit;
+    const data = has_more ? rows.slice(0, limit) : rows;
+
+    const lastItem = data[data.length - 1];
+    const next_cursor = has_more && lastItem ? PaginationUtil.encodeCursor({ id: lastItem.id, created_at: lastItem.last_active_at.toISOString() }) : null;
+
+    return {
+      sessions: data,
+      next_cursor,
+      has_more,
+      total: parseInt(countRows[0].count, 10),
+    };
   },
 
   /**

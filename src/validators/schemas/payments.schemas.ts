@@ -3,7 +3,7 @@
  */
 
 import { z } from 'zod';
-import { idParamSchema, uuidSchema, longTextSchema, stellarTxHashSchema } from './common.schemas';
+import { idParamSchema, uuidSchema, longTextSchema, stellarTxHashSchema, cursorPaginationSchema } from './common.schemas';
 
 const amountSchema = z
   .string()
@@ -62,17 +62,7 @@ export const webhookPaymentSchema = z.object({
 });
 
 export const listPaymentsSchema = z.object({
-  query: z.object({
-    page: z
-      .string()
-      .optional()
-      .transform((v) => (v ? parseInt(v, 10) : 1))
-      .refine((v) => v >= 1, 'Page must be at least 1'),
-    limit: z
-      .string()
-      .optional()
-      .transform((v) => (v ? parseInt(v, 10) : 20))
-      .refine((v) => v >= 1 && v <= 100, 'Limit must be between 1 and 100'),
+  query: cursorPaginationSchema.shape.query.extend({
     status: z
       .enum(['pending', 'processing', 'completed', 'failed', 'cancelled', 'refunded'])
       .optional(),

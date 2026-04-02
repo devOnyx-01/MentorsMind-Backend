@@ -1,4 +1,5 @@
 import pool from "../config/database";
+import { PaginationUtil } from "../utils/pagination.utils";
 
 export interface SessionRecord {
   id: string;
@@ -108,17 +109,47 @@ export const SessionModel = {
   },
 
   /**
-   * Find sessions by user ID (either as mentor or mentee)
+   * Find sessions by user ID (either as mentor or mentee) with cursor pagination
    */
-  async findByUserId(userId: string): Promise<SessionRecord[]> {
-    const query = `
-      SELECT * FROM sessions
-      WHERE mentor_id = $1 OR mentee_id = $1
-      ORDER BY scheduled_at DESC
-    `;
+  async findByUserIdPaginated(userId: string, filters: { cursor?: string; limit?: number }): Promise<{ sessions: SessionRecord[]; next_cursor: string | null; has_more: boolean; total: number }> {
+    const limit = filters.limit ?? 20;
 
-    const { rows } = await pool.query<SessionRecord>(query, [userId]);
-    return rows;
+    const conditions: string[] = ['(mentor_id = $1 OR mentee_id = $1)'];
+    const params: unknown[] = [userId];
+    let idx = 2;
+
+    if (filters.cursor) {
+      const decoded = PaginationUtil.decodeCursor(filters.cursor);
+      if (decoded) {
+        conditions.push(`(scheduled_at, id) < ($${idx}, $${idx + 1})`);
+        params.push(decoded.created_at, decoded.id);
+        idx += 2;
+      }
+    }
+
+    const [{ rows }, { rows: countRows }] = await Promise.all([
+      pool.query<SessionRecord>(
+        `SELECT * FROM sessions
+         WHERE ${conditions.join(' AND ')}
+         ORDER BY scheduled_at DESC, id DESC
+         LIMIT $${idx}`,
+        [...params, limit + 1],
+      ),
+      pool.query(`SELECT COUNT(*) FROM sessions WHERE mentor_id = $1 OR mentee_id = $1`, [userId]),
+    ]);
+
+    const has_more = rows.length > limit;
+    const data = has_more ? rows.slice(0, limit) : rows;
+
+    const lastItem = data[data.length - 1];
+    const next_cursor = has_more && lastItem ? PaginationUtil.encodeCursor({ id: lastItem.id, created_at: lastItem.scheduled_at.toISOString() }) : null;
+
+    return {
+      sessions: data,
+      next_cursor,
+      has_more,
+      total: parseInt(countRows[0].count, 10),
+    };
   },
 
   /**

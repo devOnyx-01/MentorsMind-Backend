@@ -15,6 +15,7 @@ import { WalletModel } from '../models/wallet.model';
 import { Keypair, TransactionBuilder, Operation, Asset } from '@stellar/stellar-sdk';
 import { server, networkPassphrase, getPlatformKeypair } from '../config/stellar';
 import { EncryptionUtil } from '../utils/encryption.utils';
+import { PaginationUtil } from '../utils/pagination.utils';
 
 export type PaymentStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled' | 'refunded';
 export type PaymentType = 'payment' | 'refund' | 'platform_fee' | 'mentor_payout' | 'escrow_hold' | 'escrow_release';
@@ -181,15 +182,22 @@ export const PaymentsService = {
 
   async listUserPayments(
     userId: string,
-    filters: { page?: number; limit?: number; status?: PaymentStatus; type?: PaymentType; from?: string; to?: string },
-  ): Promise<{ payments: PaymentRecord[]; total: number }> {
-    const page = filters.page ?? 1;
+    filters: { cursor?: string; limit?: number; status?: PaymentStatus; type?: PaymentType; from?: string; to?: string },
+  ): Promise<{ payments: PaymentRecord[]; next_cursor: string | null; has_more: boolean; total: number }> {
     const limit = filters.limit ?? 20;
-    const offset = (page - 1) * limit;
 
     const conditions: string[] = ['t.user_id = $1'];
     const params: unknown[] = [userId];
     let idx = 2;
+
+    if (filters.cursor) {
+      const decoded = PaginationUtil.decodeCursor(filters.cursor);
+      if (decoded) {
+        conditions.push(`(t.created_at, t.id) < ($${idx}, $${idx + 1})`);
+        params.push(decoded.created_at, decoded.id);
+        idx += 2;
+      }
+    }
 
     if (filters.status) { conditions.push(`t.status = $${idx++}`); params.push(filters.status); }
     if (filters.type) { conditions.push(`t.type = $${idx++}`); params.push(filters.type); }
@@ -200,26 +208,33 @@ export const PaymentsService = {
 
     const [{ rows }, { rows: countRows }] = await Promise.all([
       pool.query<PaymentRecord>(
-        `SELECT * FROM transactions t WHERE ${where} ORDER BY t.created_at DESC LIMIT $${idx} OFFSET $${idx + 1}`,
-        [...params, limit, offset],
+        `SELECT * FROM transactions t WHERE ${where} ORDER BY t.created_at DESC, t.id DESC LIMIT $${idx}`,
+        [...params, limit + 1],
       ),
-      pool.query(`SELECT COUNT(*) FROM transactions t WHERE ${where}`, params),
+      pool.query(`SELECT COUNT(*) FROM transactions t WHERE t.user_id = $1 ${filters.status ? `AND status = $2` : ''}`, filters.status ? [userId, filters.status] : [userId]),
     ]);
 
-    return { payments: rows, total: parseInt(countRows[0].count, 10) };
+    const has_more = rows.length > limit;
+    const data = has_more ? rows.slice(0, limit) : rows;
+    
+    const lastItem = data[data.length - 1];
+    const next_cursor = has_more && lastItem ? PaginationUtil.encodeCursor(PaginationUtil.getCursorFromItem(lastItem)!) : null;
+
+    return { payments: data, next_cursor, has_more, total: parseInt(countRows[0].count, 10) };
   },
 
   async getPaymentHistory(
     userId: string,
-    filters: { page?: number; limit?: number; from?: string; to?: string },
-  ): Promise<{ payments: PaymentRecord[]; total: number; totalVolume: string }> {
+    filters: { cursor?: string; limit?: number; from?: string; to?: string },
+  ): Promise<{ payments: PaymentRecord[]; next_cursor: string | null; has_more: boolean; total: number; totalVolume: string }> {
     const result = await this.listUserPayments(userId, { ...filters, status: 'completed' });
-
+    
+    // For volume we only sum completed ones
     const { rows } = await pool.query<{ total_volume: string }>(
       `SELECT COALESCE(SUM(amount), 0)::text AS total_volume
        FROM transactions
        WHERE user_id = $1 AND status = 'completed'`,
-      [userId],
+       [userId],
     );
 
     return { ...result, totalVolume: rows[0]?.total_volume ?? '0' };

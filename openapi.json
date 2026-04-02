@@ -1649,18 +1649,19 @@
         "parameters": [
           {
             "in": "query",
-            "name": "page",
+            "name": "cursor",
             "schema": {
-              "type": "integer",
-              "default": 1
-            }
+              "type": "string"
+            },
+            "description": "Base64 encoded cursor { id, created_at } for pagination"
           },
           {
             "in": "query",
             "name": "limit",
             "schema": {
               "type": "integer",
-              "default": 10
+              "default": 10,
+              "maximum": 100
             }
           },
           {

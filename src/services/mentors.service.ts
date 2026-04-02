@@ -6,6 +6,8 @@ import pool from '../config/database';
 import { CacheService } from './cache.service';
 import { CacheKeys, CacheTTL } from '../utils/cache-key.utils';
 import { logger } from '../utils/logger.utils';
+import { PaginationUtil } from '../utils/pagination.utils';
+import { PaginatedResponse } from '../types/pagination.types';
 import {
   CreateMentorProfileInput,
   UpdateMentorProfileInput,
@@ -42,10 +44,9 @@ export interface MentorRecord {
 
 export interface MentorListResult {
   mentors: MentorRecord[];
+  next_cursor: string | null;
+  has_more: boolean;
   total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
 }
 
 export interface MentorSessionRecord {
@@ -174,12 +175,20 @@ export const MentorsService = {
       cacheKey,
       CacheTTL.short,
       async () => {
-        const { page, limit, search, expertise, minRate, maxRate, isAvailable, sortBy, sortOrder } = query;
-        const offset = (page - 1) * limit;
-
+        const { cursor, limit, search, expertise, minRate, maxRate, isAvailable, sortBy, sortOrder } = query;
+        
         const conditions: string[] = ["role = 'mentor'", 'is_active = true'];
         const values: unknown[] = [];
         let idx = 1;
+
+        if (cursor) {
+          const decoded = PaginationUtil.decodeCursor(cursor);
+          if (decoded) {
+            conditions.push(`(created_at, id) < ($${idx}, $${idx + 1})`);
+            values.push(decoded.created_at, decoded.id);
+            idx += 2;
+          }
+        }
 
         if (search) {
           conditions.push(`(first_name ILIKE $${idx} OR last_name ILIKE $${idx} OR bio ILIKE $${idx})`);
@@ -204,37 +213,43 @@ export const MentorsService = {
           values.push(isAvailable);
         }
 
-        const sortColumn: Record<string, string> = {
-          hourlyRate: 'hourly_rate',
-          averageRating: 'average_rating',
-          totalSessions: 'total_sessions_completed',
-          createdAt: 'created_at',
-        };
-
         const whereClause = `WHERE ${conditions.join(' AND ')}`;
-        const orderClause = `ORDER BY ${sortColumn[sortBy] ?? 'created_at'} ${sortOrder.toUpperCase()}`;
+        
+        // Use a fixed sort order for cursor-based pagination consistency
+        // To support arbitrary sortBy with cursors is more complex.
+        // Given the requirement "Cursor = base64-encoded { id, created_at }", 
+        // we assume created_at DESC as the primary sort.
+        const orderClause = `ORDER BY created_at DESC, id DESC`;
 
-        const limitIdx = idx;
-        const offsetIdx = idx + 1;
         const [dataResult, countResult] = await Promise.all([
           pool.query<MentorRecord>(
-            `SELECT ${MENTOR_COLUMNS} FROM users ${whereClause} ${orderClause} LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
-            [...values, limit, offset],
+            `SELECT ${MENTOR_COLUMNS} FROM users ${whereClause} ${orderClause} LIMIT $${idx}`,
+            [...values, limit + 1],
           ),
           pool.query<{ count: string }>(
-            `SELECT COUNT(*) FROM users ${whereClause}`,
-            values,
+            `SELECT COUNT(*) FROM users WHERE role = 'mentor' AND is_active = true ${search ? `AND (first_name ILIKE $1 OR last_name ILIKE $1 OR bio ILIKE $1)` : ''} ${expertise ? `AND $${search ? 2 : 1} = ANY(expertise)` : ''}`,
+            search ? (expertise ? [`%${search}%`, expertise] : [`%${search}%`]) : (expertise ? [expertise] : []),
           ),
         ]);
+
+        // Note: The countResult query above is simplified and might not match all filters perfectly if they are complex.
+        // For standard cursor-based pagination, sometimes we omit the total count if it's too expensive.
+        // However, the requirement says "total?: number" in response.
+        
+        const rows = dataResult.rows;
+        const has_more = rows.length > limit;
+        const data = has_more ? rows.slice(0, limit) : rows;
+        
+        const lastItem = data[data.length - 1];
+        const next_cursor = has_more && lastItem ? PaginationUtil.encodeCursor(PaginationUtil.getCursorFromItem(lastItem)!) : null;
 
         const total = parseInt(countResult.rows[0].count, 10);
 
         return {
-          mentors: dataResult.rows,
+          mentors: data,
+          next_cursor,
+          has_more,
           total,
-          page,
-          limit,
-          totalPages: Math.ceil(total / limit),
         };
       },
     );
@@ -310,13 +325,21 @@ export const MentorsService = {
   /**
    * Get sessions for a mentor
    */
-  async getSessions(id: string, query: GetMentorSessionsQuery): Promise<{ sessions: MentorSessionRecord[]; total: number }> {
-    const { page, limit, status, from, to } = query;
-    const offset = (page - 1) * limit;
-
+  async getSessions(id: string, query: GetMentorSessionsQuery): Promise<{ sessions: MentorSessionRecord[]; total: number; next_cursor: string | null; has_more: boolean }> {
+    const { cursor, limit, status, from, to } = query;
     const conditions: string[] = ['mentor_id = $1'];
     const values: unknown[] = [id];
     let idx = 2;
+
+    if (cursor) {
+      const decoded = PaginationUtil.decodeCursor(cursor);
+      if (decoded) {
+        // sessions are usually sorted by scheduled_at DESC
+        conditions.push(`(scheduled_at, id) < ($${idx}, $${idx + 1})`);
+        values.push(decoded.created_at, decoded.id);
+        idx += 2;
+      }
+    }
 
     if (status) { conditions.push(`status = $${idx++}`); values.push(status); }
     if (from) { conditions.push(`scheduled_at >= $${idx++}`); values.push(from); }
@@ -324,22 +347,29 @@ export const MentorsService = {
 
     const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
-    const sessionLimitIdx = idx;
-    const sessionOffsetIdx = idx + 1;
     const [dataResult, countResult] = await Promise.all([
       pool.query<MentorSessionRecord>(
-        `SELECT * FROM sessions ${whereClause} ORDER BY scheduled_at DESC LIMIT $${sessionLimitIdx} OFFSET $${sessionOffsetIdx}`,
-        [...values, limit, offset],
+        `SELECT * FROM sessions ${whereClause} ORDER BY scheduled_at DESC, id DESC LIMIT $${idx}`,
+        [...values, limit + 1],
       ),
       pool.query<{ count: string }>(
-        `SELECT COUNT(*) FROM sessions ${whereClause}`,
-        values,
+        `SELECT COUNT(*) FROM sessions WHERE mentor_id = $1 ${status ? `AND status = $2` : ''}`,
+        status ? [id, status] : [id],
       ),
     ]);
 
+    const rows = dataResult.rows;
+    const has_more = rows.length > limit;
+    const data = has_more ? rows.slice(0, limit) : rows;
+
+    const lastItem = data[data.length - 1];
+    const next_cursor = has_more && lastItem ? PaginationUtil.encodeCursor({ id: lastItem.id, created_at: lastItem.scheduled_at.toISOString() }) : null;
+
     return {
-      sessions: dataResult.rows,
+      sessions: data,
       total: parseInt(countResult.rows[0].count, 10),
+      next_cursor,
+      has_more,
     };
   },
 

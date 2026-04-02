@@ -1,6 +1,13 @@
-import { Response } from 'express';
-import { AuthenticatedRequest } from '../middleware/auth.middleware';
+import { Response, Request } from 'express';
 import { SessionManagerService } from '../services/sessionManager.service';
+
+interface AuthenticatedRequest extends Request {
+  user?: {
+    id: string;
+    userId: string;
+    role: string;
+  }
+}
 
 export const SessionsController = {
   /**
@@ -8,13 +15,22 @@ export const SessionsController = {
    * List all active sessions for the current user.
    */
   async listSessions(req: AuthenticatedRequest, res: Response) {
-    const userId = req.user?.userId;
+    const userId = req.user?.userId || (req as any).user?.id;
     if (!userId) {
       return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
 
-    const sessions = await SessionManagerService.listSessions(userId);
-    return res.status(200).json({ success: true, data: sessions });
+    const { cursor, limit } = req.query as any;
+    const result = await SessionManagerService.listSessions(userId, { cursor, limit: limit ? parseInt(limit, 10) : 20 });
+    return res.status(200).json({
+      success: true,
+      data: {
+        data: result.sessions,
+        next_cursor: result.next_cursor,
+        has_more: result.has_more,
+        total: result.total,
+      }
+    });
   },
 
   /**

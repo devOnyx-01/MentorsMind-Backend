@@ -178,32 +178,44 @@ export const BookingsController = {
    * GET /api/v1/bookings
    */
   listBookings: asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req as any).user?.id; // Assuming auth middleware sets req.user
+    const userId = (req as any).user?.id || (req as any).user?.userId;
 
     if (!userId) {
       return ResponseUtil.error(res, "Unauthorized", 401);
     }
 
-    const { upcoming } = req.query;
-    let sessions;
-
+    const { upcoming, cursor, limit } = req.query as any;
+    
+    // We only support cursor pagination for the main list for now as per standardization requirements
     if (upcoming === "true") {
-      sessions = await SessionModel.findUpcomingByUserId(userId);
-    } else {
-      sessions = await SessionModel.findByUserId(userId);
+      const sessions = await SessionModel.findUpcomingByUserId(userId);
+      const sessionsData = sessions.map((session) => ({
+        ...session,
+        meeting_url: session.status === "confirmed" ? session.meeting_url : null,
+        meeting_provider: session.status === "confirmed" ? session.meeting_provider : null,
+        meeting_expires_at: session.status === "confirmed" ? session.meeting_expires_at : null,
+      }));
+      return ResponseUtil.success(res, { data: sessionsData });
     }
 
-    // Filter meeting URLs based on confirmation status
-    const sessionsData = sessions.map((session) => ({
+    const result = await SessionModel.findByUserIdPaginated(userId, { 
+      cursor, 
+      limit: limit ? parseInt(limit, 10) : 20 
+    });
+
+    const sessionsData = result.sessions.map((session) => ({
       ...session,
       meeting_url: session.status === "confirmed" ? session.meeting_url : null,
-      meeting_provider:
-        session.status === "confirmed" ? session.meeting_provider : null,
-      meeting_expires_at:
-        session.status === "confirmed" ? session.meeting_expires_at : null,
+      meeting_provider: session.status === "confirmed" ? session.meeting_provider : null,
+      meeting_expires_at: session.status === "confirmed" ? session.meeting_expires_at : null,
     }));
 
-    ResponseUtil.success(res, { sessions: sessionsData });
+    ResponseUtil.success(res, { 
+      data: sessionsData,
+      next_cursor: result.next_cursor,
+      has_more: result.has_more,
+      total: result.total
+    });
   }),
 
   /**

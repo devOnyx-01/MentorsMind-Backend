@@ -125,8 +125,9 @@ router.post(
  *       - bearerAuth: []
  *     parameters:
  *       - in: query
- *         name: page
- *         schema: { type: integer, default: 1 }
+ *         name: cursor
+ *         schema: { type: string }
+ *         description: Base64 encoded cursor { id, created_at }
  *       - in: query
  *         name: limit
  *         schema: { type: integer, default: 20, maximum: 100 }
