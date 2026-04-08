@@ -90,10 +90,10 @@ export const PaymentsController = {
   /** GET /api/v1/payments */
   async listPayments(req: AuthenticatedRequest, res: Response): Promise<void> {
     const userId = req.user!.id;
-    const { page, limit, status, type, from, to } = req.query as unknown as ListPaymentsQuery;
+    const { cursor, limit, status, type, from, to } = req.query as unknown as ListPaymentsQuery;
 
     const result = await PaymentsService.listUserPayments(userId, {
-      page,
+      cursor,
       limit,
       status: status as PaymentStatus | undefined,
       type: type as PaymentType | undefined,
@@ -101,16 +101,12 @@ export const PaymentsController = {
       to,
     });
 
-    const totalPages = Math.ceil(result.total / (limit ?? 20));
-
-    ResponseUtil.success(res, result.payments, 'Payments retrieved successfully', 200, {
-      page: page ?? 1,
-      limit: limit ?? 20,
+    ResponseUtil.success(res, {
+      data: result.payments,
+      next_cursor: result.next_cursor,
+      has_more: result.has_more,
       total: result.total,
-      totalPages,
-      hasNext: (page ?? 1) < totalPages,
-      hasPrev: (page ?? 1) > 1,
-    });
+    }, 'Payments retrieved successfully');
   },
 
   /** POST /api/v1/payments/:id/refund */
@@ -138,25 +134,20 @@ export const PaymentsController = {
   /** GET /api/v1/payments/history */
   async getPaymentHistory(req: AuthenticatedRequest, res: Response): Promise<void> {
     const userId = req.user!.id;
-    const { page, limit, from, to } = req.query as unknown as ListPaymentsQuery;
+    const { cursor, limit, from, to } = req.query as unknown as ListPaymentsQuery;
 
-    const result = await PaymentsService.getPaymentHistory(userId, { page, limit, from, to });
-
-    const totalPages = Math.ceil(result.total / (limit ?? 20));
+    const result = await PaymentsService.getPaymentHistory(userId, { cursor, limit, from, to });
 
     ResponseUtil.success(
       res,
-      { payments: result.payments, totalVolume: result.totalVolume },
-      'Payment history retrieved successfully',
-      200,
       {
-        page: page ?? 1,
-        limit: limit ?? 20,
+        data: result.payments,
+        totalVolume: result.totalVolume,
+        next_cursor: result.next_cursor,
+        has_more: result.has_more,
         total: result.total,
-        totalPages,
-        hasNext: (page ?? 1) < totalPages,
-        hasPrev: (page ?? 1) > 1,
       },
+      'Payment history retrieved successfully',
     );
   },
 

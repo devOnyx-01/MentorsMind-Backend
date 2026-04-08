@@ -49,15 +49,13 @@ export const MentorsController = {
     const result = await MentorsService.list(req.query as any);
     ResponseUtil.success(
       res,
-      { mentors: result.mentors },
-      'Mentors retrieved successfully',
-      200,
       {
-        page: result.page,
-        limit: result.limit,
+        data: result.mentors,
+        next_cursor: result.next_cursor,
+        has_more: result.has_more,
         total: result.total,
-        totalPages: result.totalPages,
       },
+      'Mentors retrieved successfully',
     );
   },
 
@@ -101,13 +99,16 @@ export const MentorsController = {
 
   /** GET /mentors/:id/sessions */
   async getSessions(req: AuthenticatedRequest, res: Response): Promise<void> {
+    // This endpoint also needs to be migrated to cursor pagination if we want consistency.
+    // However, the Service.getSessions hasn't been updated yet. 
+    // I'll update the Service.getSessions first.
     const result = await MentorsService.getSessions(req.params.id, req.query as any);
-    ResponseUtil.success(res, { sessions: result.sessions }, 'Sessions retrieved successfully', 200, {
-      page: (req.query as any).page ?? 1,
-      limit: (req.query as any).limit ?? 10,
+    ResponseUtil.success(res, {
+      data: result.sessions,
+      next_cursor: result.next_cursor,
+      has_more: result.has_more,
       total: result.total,
-      totalPages: Math.ceil(result.total / ((req.query as any).limit ?? 10)),
-    });
+    }, 'Sessions retrieved successfully');
   },
 
   /** GET /mentors/:id/earnings */
