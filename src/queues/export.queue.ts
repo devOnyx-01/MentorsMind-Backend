@@ -1,6 +1,7 @@
 import { Queue, Worker, Job } from 'bullmq';
 import config from '../config';
 import { ExportService } from '../services/export.service';
+import { EarningsReportService } from '../services/earningsReport.service';
 import { ExportJobModel } from '../models/export-job.model';
 import { AuditLoggerService } from '../services/audit-logger.service';
 import { LogLevel } from '../utils/log-formatter.utils';
@@ -20,8 +21,15 @@ export const exportQueue = new Queue('export-queue', { connection });
 export const exportWorker = new Worker(
   'export-queue',
   async (job: Job) => {
-    const { userId, jobId } = job.data;
-    await ExportService.processExport(userId, jobId);
+    const { userId, jobId, type } = job.data;
+    
+    if (type === 'earnings-export') {
+      const { format, period, startDate, endDate } = job.data;
+      await EarningsReportService.processQueuedExport(jobId, userId, format, period, startDate, endDate);
+    } else {
+      // Regular data export
+      await ExportService.processExport(userId, jobId);
+    }
   },
   { connection, concurrency: 5 }
 );
