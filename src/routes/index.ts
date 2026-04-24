@@ -22,9 +22,10 @@ import {
 } from "../config/api-versions.config";
 import { asyncHandler } from "../utils/asyncHandler.utils";
 import { HealthController } from "../controllers/health.controller";
-import { HealthService } from "../services/health.service";
 import { logger } from "../utils/logger.utils";
 import { JwksController } from "../controllers/jwks.controller";
+import { metricsRegistry } from "../config/metrics";
+import { monitoringConfig } from "../config/monitoring.config";
 
 const router = Router();
 
@@ -98,5 +99,20 @@ router.get("/", (_req, res) => {
 
 // ── Health ───────────────────────────────────────────────────────────────────
 // Health routes moved to app.ts for global accessibility
+router.get("/health/live", asyncHandler(HealthController.getLive));
+router.get("/health/ready", asyncHandler(HealthController.getReady));
+router.get("/health", (_req, res) => res.redirect("/health/ready"));
+
+// ── Metrics ──────────────────────────────────────────────────────────────────
+const metricsEndpoint = monitoringConfig.prometheus.endpoint || "/metrics";
+router.get(metricsEndpoint, async (_req, res) => {
+  try {
+    const output = await metricsRegistry.metrics();
+    res.setHeader("Content-Type", metricsRegistry.contentType);
+    res.send(output);
+  } catch {
+    res.status(500).send("Error collecting metrics");
+  }
+});
 
 export default router;

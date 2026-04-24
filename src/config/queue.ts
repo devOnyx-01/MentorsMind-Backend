@@ -9,6 +9,9 @@ export const redisConnection: ConnectionOptions = {
   host: url.hostname,
   port: parseInt(url.port, 10) || 6379,
   password: url.password || undefined,
+  // Required by BullMQ — disables ioredis per-request retry for blocking ops
+  maxRetriesPerRequest: null,
+  enableOfflineQueue: false,
 };
 
 /**

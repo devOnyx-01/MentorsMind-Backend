@@ -24,11 +24,13 @@ import escrowRoutes from "../escrow.routes";
 import walletRoutes from "../wallets.routes";
 import consentRoutes from "../consent.routes";
 import integrationsRoutes from "../integrations.routes";
+import notesRoutes from "../notes.routes";
 import { AdminService } from "../../services/admin.service";
 import { BookingsService } from "../../services/bookings.service";
 import { logger } from "../../utils/logger";
 import { VerificationService } from "../../services/verification.service";
 import { notificationCleanupService } from "../../services/notification-cleanup.service";
+import { RecommendationService } from "../../services/recommendation.service";
 
 const router = Router();
 
@@ -44,6 +46,9 @@ VerificationService.initialize().catch((err: unknown) => {
 });
 notificationCleanupService.initialize().catch((err: unknown) => {
   logger.error("Failed to initialize notification cleanup service:", err);
+});
+RecommendationService.initialize().catch((err: unknown) => {
+  logger.error("Failed to initialize recommendation tables:", err);
 });
 
 import goalRoutes from "../goal.routes";
@@ -64,6 +69,6 @@ router.use("/disputes", disputesRoutes);
 router.use("/escrow", escrowRoutes);
 router.use("/wallets", walletRoutes);
 router.use("/integrations", integrationsRoutes);
-router.use("/webhooks", webhookRoutes);
+router.use("/", notesRoutes);
 
 export default router;

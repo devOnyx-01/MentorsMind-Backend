@@ -7,6 +7,7 @@ export interface ExportJob {
   file_path: string | null;
   error_message: string | null;
   expires_at: Date | null;
+  metadata?: Record<string, any>;
   created_at: Date;
   updated_at: Date;
 }
@@ -21,6 +22,7 @@ export const ExportJobModel = {
         file_path TEXT,
         error_message TEXT,
         expires_at TIMESTAMP WITH TIME ZONE,
+        metadata JSONB DEFAULT '{}'::jsonb,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
@@ -31,17 +33,23 @@ export const ExportJobModel = {
     await pool.query(query);
   },
 
-  async create(userId: string): Promise<ExportJob> {
+  async create(userId: string, metadata?: Record<string, any>): Promise<ExportJob> {
     const query = `
-      INSERT INTO export_jobs (user_id, status)
-      VALUES ($1, 'pending')
+      INSERT INTO export_jobs (user_id, status, metadata)
+      VALUES ($1, 'pending', $2)
       RETURNING *;
     `;
-    const { rows } = await pool.query<ExportJob>(query, [userId]);
+    const { rows } = await pool.query<ExportJob>(query, [userId, JSON.stringify(metadata || {})]);
     return rows[0];
   },
 
   async findById(id: string): Promise<ExportJob | null> {
+    const query = 'SELECT * FROM export_jobs WHERE id = $1;';
+    const { rows } = await pool.query<ExportJob>(query, [id]);
+    return rows[0] || null;
+  },
+
+  async getStatus(id: string): Promise<ExportJob | null> {
     const query = 'SELECT * FROM export_jobs WHERE id = $1;';
     const { rows } = await pool.query<ExportJob>(query, [id]);
     return rows[0] || null;

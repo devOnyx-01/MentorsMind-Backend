@@ -240,7 +240,7 @@ export const PaymentsService = {
     return { ...result, totalVolume: rows[0]?.total_volume ?? '0' };
   },
 
-  async refundPayment(paymentId: string, userId: string, reason?: string, stellarTxHash?: string): Promise<PaymentRecord> {
+  async refundPayment(paymentId: string, userId: string, amount?: string, reason?: string, stellarTxHash?: string): Promise<PaymentRecord> {
     const payment = await this.getPaymentById(paymentId, userId);
 
     if (payment.status === 'refunded') throw createError('Payment already refunded', 409);
@@ -257,15 +257,19 @@ export const PaymentsService = {
       );
 
       // Create refund transaction record
+      const refundAmount = amount || payment.amount;
+      const refundStatus = stellarTxHash ? 'completed' : 'pending';
+      const completedAt = stellarTxHash ? 'NOW()' : null;
       await client.query(
         `INSERT INTO transactions
            (user_id, booking_id, type, status, amount, currency, stellar_tx_hash,
             related_transaction_id, description, asset_type, initiated_at, completed_at, created_at, updated_at)
-         VALUES ($1, $2, 'refund', 'completed', $3, $4, $5, $6, $7, 'native', NOW(), NOW(), NOW(), NOW())`,
+         VALUES ($1, $2, 'refund', $3, $4, $5, $6, $7, $8, 'native', NOW(), ${completedAt}, NOW(), NOW())`,
         [
           userId,
           payment.booking_id,
-          payment.amount,
+          refundStatus,
+          refundAmount,
           payment.currency,
           stellarTxHash ?? null,
           paymentId,
@@ -273,7 +277,7 @@ export const PaymentsService = {
         ],
       );
 
-      if (payment.booking_id) {
+      if (payment.booking_id && stellarTxHash) {
         await client.query(
           `UPDATE bookings SET payment_status = 'refunded', updated_at = NOW() WHERE id = $1`,
           [payment.booking_id],
