@@ -13,6 +13,27 @@ import { NotificationService } from '../services/notification.service';
 import { NotificationType, NotificationChannel, NotificationPriority } from '../models/notifications.model';
 import { logger } from '../utils/logger.utils';
 
+/**
+ * Whitelist of allowed flag columns to prevent SQL injection.
+ * Maps reminder type to safe column name.
+ */
+const ALLOWED_FLAG_COLUMNS = {
+    '24h': 'reminder_24h_sent',
+    '15m': 'reminder_15m_sent',
+} as const;
+
+type FlagColumnType = keyof typeof ALLOWED_FLAG_COLUMNS;
+
+/**
+ * Validates a flag column against the whitelist.
+ * Throws an error if the column is not in the allowed list.
+ */
+function validateFlagColumn(column: string): asserts column is FlagColumnType {
+    if (!Object.values(ALLOWED_FLAG_COLUMNS).includes(column as any)) {
+        throw new Error(`Invalid flag column: ${column}. Allowed values: ${Object.values(ALLOWED_FLAG_COLUMNS).join(', ')}`);
+    }
+}
+
 interface ReminderBooking {
     id: string;
     mentor_id: string;
@@ -30,12 +51,19 @@ interface ReminderBooking {
 /**
  * Fetch bookings due for a reminder within the given window.
  * Only returns confirmed, non-cancelled bookings where the flag is still false.
+ * @param flagColumn - Must be validated against ALLOWED_FLAG_COLUMNS
  */
 async function fetchDueBookings(
     windowStart: string,
     windowEnd: string,
-    flagColumn: 'reminder_24h_sent' | 'reminder_15m_sent',
+    flagColumn: keyof typeof ALLOWED_FLAG_COLUMNS,
 ): Promise<ReminderBooking[]> {
+    // Validate column name against whitelist to prevent SQL injection
+    const safeColumnName = ALLOWED_FLAG_COLUMNS[flagColumn];
+    if (!safeColumnName) {
+        throw new Error(`Invalid flag column: ${flagColumn}`);
+    }
+
     const { rows } = await pool.query<ReminderBooking>(
         `SELECT
        b.id,
@@ -53,7 +81,7 @@ async function fetchDueBookings(
      JOIN users mentor ON mentor.id = b.mentor_id
      JOIN users mentee ON mentee.id = b.mentee_id
      WHERE b.status = 'confirmed'
-       AND b.${flagColumn} = FALSE
+       AND b.${safeColumnName} = FALSE
        AND b.scheduled_start BETWEEN $1 AND $2`,
         [windowStart, windowEnd],
     );
@@ -62,13 +90,20 @@ async function fetchDueBookings(
 
 /**
  * Mark the reminder flag as sent for a booking.
+ * @param flagColumn - Must be validated against ALLOWED_FLAG_COLUMNS
  */
 async function markReminderSent(
     bookingId: string,
-    flagColumn: 'reminder_24h_sent' | 'reminder_15m_sent',
+    flagColumn: keyof typeof ALLOWED_FLAG_COLUMNS,
 ): Promise<void> {
+    // Validate column name against whitelist to prevent SQL injection
+    const safeColumnName = ALLOWED_FLAG_COLUMNS[flagColumn];
+    if (!safeColumnName) {
+        throw new Error(`Invalid flag column: ${flagColumn}`);
+    }
+
     await pool.query(
-        `UPDATE bookings SET ${flagColumn} = TRUE, updated_at = NOW() WHERE id = $1`,
+        `UPDATE bookings SET ${safeColumnName} = TRUE, updated_at = NOW() WHERE id = $1`,
         [bookingId],
     );
 }
@@ -127,7 +162,7 @@ async function sendReminderToUser(
 async function processReminders(
     windowStart: string,
     windowEnd: string,
-    flagColumn: 'reminder_24h_sent' | 'reminder_15m_sent',
+    flagColumn: keyof typeof ALLOWED_FLAG_COLUMNS,
     reminderType: '24h' | '15m',
 ): Promise<void> {
     const bookings = await fetchDueBookings(windowStart, windowEnd, flagColumn);

@@ -10,10 +10,8 @@ import {
 import { SocketService } from "./socket.service";
 import pool from "../config/database";
 import { CalendarService } from "./calendar.service";
-import { SorobanEscrowService } from './sorobanEscrow.service';
-import videoSessionService from "./videoSession.service";
-import { PaymentsService } from './payments.service';
-import { QueueService } from './queue.service';
+import { SorobanEscrowService } from "./sorobanEscrow.service";
+import { QueueService } from "./queue.service";
 
 export interface CreateBookingData {
   menteeId: string;
@@ -34,15 +32,6 @@ export interface UpdateBookingData {
 interface BookingEscrowMetadata {
   escrow_id: string | null;
   escrow_contract_address: string | null;
-}
-
-async function ensureEscrowMetadataColumns(): Promise<void> {
-  await pool.query(
-    `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS escrow_contract_address VARCHAR(255)`,
-  );
-  await pool.query(
-    `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS escrow_id VARCHAR(255)`,
-  );
 }
 
 async function getBookingEscrowMetadata(
@@ -85,7 +74,6 @@ function isCancelledBeforeSession(booking: BookingRecord): boolean {
 export const BookingsService = {
   async initialize(): Promise<void> {
     await BookingModel.initializeTable();
-    await ensureEscrowMetadataColumns();
     SorobanEscrowService.startPendingEscrowMonitoring();
   },
 
@@ -254,9 +242,11 @@ export const BookingsService = {
       throw createError("Payment must be completed before confirmation", 400);
     }
 
-    let onChainEscrow:
-      | { contractAddress: string; escrowId: string; txHash: string | null }
-      | null = null;
+    let onChainEscrow: {
+      contractAddress: string;
+      escrowId: string;
+      txHash: string | null;
+    } | null = null;
 
     if (SorobanEscrowService.isConfigured()) {
       onChainEscrow = await SorobanEscrowService.createEscrow({
@@ -268,7 +258,9 @@ export const BookingsService = {
       });
     }
 
-    const updated = await BookingModel.update(bookingId, { status: 'confirmed' });
+    const updated = await BookingModel.update(bookingId, {
+      status: "confirmed",
+    });
 
     if (!updated) {
       throw createError("Failed to confirm booking", 500);
@@ -277,7 +269,7 @@ export const BookingsService = {
     // Invalidate session list cache for both users
     await CacheService.del(CacheKeys.sessionList(booking.mentee_id));
     await CacheService.del(CacheKeys.sessionList(booking.mentor_id));
-    logger.debug('Booking cache invalidated on confirmation', { bookingId });
+    logger.debug("Booking cache invalidated on confirmation", { bookingId });
 
     if (onChainEscrow) {
       await setBookingEscrowMetadata(
@@ -340,13 +332,18 @@ export const BookingsService = {
           contractAddress: metadata.escrow_contract_address || undefined,
         });
       } else {
-        logger.warn('Skipping Soroban release_funds: no escrow metadata on booking', {
-          bookingId,
-        });
+        logger.warn(
+          "Skipping Soroban release_funds: no escrow metadata on booking",
+          {
+            bookingId,
+          },
+        );
       }
     }
 
-    const updated = await BookingModel.update(bookingId, { status: 'completed' });
+    const updated = await BookingModel.update(bookingId, {
+      status: "completed",
+    });
 
     if (!updated) {
       throw createError("Failed to complete booking", 500);
@@ -355,12 +352,12 @@ export const BookingsService = {
     // Invalidate session list cache for both users
     await CacheService.del(CacheKeys.sessionList(booking.mentee_id));
     await CacheService.del(CacheKeys.sessionList(booking.mentor_id));
-    
+
     // Invalidate learner progress cache for the mentee
-    const { LearnerService } = await import('./learners.service');
+    const { LearnerService } = await import("./learners.service");
     await LearnerService.invalidateCache(booking.mentee_id);
 
-    logger.debug('Booking cache invalidated on completion', { bookingId });
+    logger.debug("Booking cache invalidated on completion", { bookingId });
     // Emit session:updated event to both mentor and mentee
     SocketService.emitToUser(booking.mentor_id, "session:updated", {
       bookingId,
@@ -390,19 +387,38 @@ export const BookingsService = {
     // Calculate refund eligibility
     const refundInfo = calculateRefundEligibility(booking.scheduled_at);
 
-    if (isCancelledBeforeSession(booking) && SorobanEscrowService.isConfigured()) {
+    let sorobanRefunded = false;
+
+    if (
+      isCancelledBeforeSession(booking) &&
+      SorobanEscrowService.isConfigured()
+    ) {
       const metadata = await getBookingEscrowMetadata(bookingId);
       if (metadata.escrow_id) {
-        await SorobanEscrowService.refund({
+        const refundResult = await SorobanEscrowService.refund({
           escrowId: metadata.escrow_id,
           refundedBy: userId,
           contractAddress: metadata.escrow_contract_address || undefined,
-          amount: refundInfo.eligible ? String(parseFloat(booking.amount) * (refundInfo.refundPercentage / 100)) : undefined,
+          amount: refundInfo.eligible
+            ? String(
+                parseFloat(booking.amount) *
+                  (refundInfo.refundPercentage / 100),
+              )
+            : undefined,
         });
-        // Update booking payment_status to 'refunded' after Soroban refund
-        await BookingModel.update(bookingId, { paymentStatus: 'refunded' });
+        await BookingModel.update(bookingId, {
+          paymentStatus: "refunded",
+          ...(refundResult.txHash
+            ? { stellarTxHash: refundResult.txHash }
+            : {}),
+        });
+        sorobanRefunded = true;
+        logger.info("Soroban refund successful", {
+          bookingId,
+          txHash: refundResult.txHash,
+        });
       } else {
-        logger.warn('Skipping Soroban refund: no escrow metadata on booking', {
+        logger.warn("Skipping Soroban refund: no escrow metadata on booking", {
           bookingId,
         });
       }
@@ -411,7 +427,11 @@ export const BookingsService = {
     const updated = await BookingModel.update(bookingId, {
       status: "cancelled",
       cancellationReason: reason || "No reason provided",
-      paymentStatus: refundInfo.eligible ? "refund_pending" : booking.payment_status,
+      ...(!sorobanRefunded && {
+        paymentStatus: refundInfo.eligible
+          ? "refund_pending"
+          : booking.payment_status,
+      }),
     });
 
     if (!updated) {
@@ -423,16 +443,18 @@ export const BookingsService = {
     await CacheService.del(CacheKeys.sessionList(booking.mentor_id));
     logger.debug("Booking cache invalidated on cancellation", { bookingId });
 
-    if (refundInfo.eligible && booking.transaction_id) {
+    if (!sorobanRefunded && refundInfo.eligible && booking.transaction_id) {
       await QueueService.submitStellarTx({
-        type: 'refund',
-        paymentId: booking.transaction_id, // This needs to be the original transaction ID
-        amount: String(parseFloat(booking.amount) * (refundInfo.refundPercentage / 100)),
+        type: "refund",
+        paymentId: booking.transaction_id,
+        amount: String(
+          parseFloat(booking.amount) * (refundInfo.refundPercentage / 100),
+        ),
         currency: booking.currency,
         userId: booking.mentee_id,
         description: refundInfo.reason,
       });
-      logger.info('Refund job enqueued', { bookingId, refundInfo });
+      logger.info("Refund job enqueued", { bookingId, refundInfo });
     }
 
     // Emit session:updated event to both mentor and mentee

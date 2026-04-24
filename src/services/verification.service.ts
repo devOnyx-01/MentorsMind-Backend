@@ -6,6 +6,21 @@
 import pool from '../config/database';
 import { enqueueEmail } from '../queues/email.queue';
 import { logger } from '../utils/logger.utils';
+import * as StellarSdk from '@stellar/stellar-sdk';
+
+const SOROBAN_RPC_URL = process.env.SOROBAN_RPC_URL || 'https://soroban-testnet.stellar.org';
+const VERIFICATION_CONTRACT_ADDRESS = process.env.VERIFICATION_CONTRACT_ADDRESS;
+
+interface VerificationContractInvocation {
+  contractAddress: string;
+  method: string;
+  args: unknown[];
+}
+
+interface OnChainVerificationResult {
+  txHash: string | null;
+  successful: boolean;
+}
 
 export type VerificationStatus =
     | 'pending'
@@ -368,11 +383,107 @@ export const VerificationService = {
         }
     },
 
-    async triggerOnChainVerification(_mentorId: string): Promise<string | null> {
-        logger.info('[VerificationService] On-chain verification triggered (placeholder)', {
-            mentorId: _mentorId,
-        });
-        // TODO: integrate with Stellar smart contract
-        return null;
+    async triggerOnChainVerification(mentorId: string): Promise<string | null> {
+        if (!VERIFICATION_CONTRACT_ADDRESS) {
+            logger.warn('[VerificationService] VERIFICATION_CONTRACT_ADDRESS not configured, skipping on-chain verification', { mentorId });
+            return null;
+        }
+
+        const sdkAny = StellarSdk as any;
+        const SorobanRpc = sdkAny.SorobanRpc || sdkAny.rpc;
+
+        if (!SorobanRpc?.Server) {
+            logger.error('[VerificationService] Soroban RPC not available in stellar-sdk', { mentorId });
+            throw new Error('Soroban RPC is not available. Cannot proceed with on-chain verification.');
+        }
+
+        const rpcServer = new SorobanRpc.Server(SOROBAN_RPC_URL);
+
+        const platformKeypair = process.env.PLATFORM_SECRET_KEY
+            ? sdkAny.Keypair.fromSecret(process.env.PLATFORM_SECRET_KEY)
+            : null;
+
+        const sourcePublicKey = platformKeypair?.publicKey?.() || process.env.PLATFORM_PUBLIC_KEY;
+
+        if (!sourcePublicKey) {
+            logger.error('[VerificationService] Platform signing key not configured', { mentorId });
+            throw new Error('Platform signing key is not configured. Cannot proceed with on-chain verification.');
+        }
+
+        const networkPassphrase = process.env.STELLAR_NETWORK === 'mainnet'
+            ? sdkAny.Networks.PUBLIC
+            : sdkAny.Networks.TESTNET;
+
+        try {
+            const account = await rpcServer.getAccount(sourcePublicKey);
+
+            const contract = new sdkAny.Contract(VERIFICATION_CONTRACT_ADDRESS);
+
+            const verificationData = {
+                mentor_id: mentorId,
+                verified_at: Math.floor(Date.now() / 1000),
+            };
+
+            const scValData = sdkAny.nativeToScVal
+                ? sdkAny.nativeToScVal(verificationData, { type: 'map' })
+                : verificationData;
+
+            const operation = contract.call('verify_credential', scValData);
+
+            const tx = new sdkAny.TransactionBuilder(account, {
+                fee: '200',
+                networkPassphrase,
+            })
+                .addOperation(operation)
+                .setTimeout(30)
+                .build();
+
+            const simulation = await rpcServer.simulateTransaction(tx);
+
+            if (simulation?.error) {
+                logger.error('[VerificationService] On-chain verification simulation failed', {
+                    mentorId,
+                    error: String(simulation.error),
+                });
+                throw new Error(`Verification simulation failed: ${simulation.error}`);
+            }
+
+            let preparedTx = tx;
+            if (SorobanRpc.assembleTransaction) {
+                const assembled = SorobanRpc.assembleTransaction(tx, simulation);
+                preparedTx = assembled?.build ? assembled.build() : assembled;
+            }
+
+            if (platformKeypair && typeof preparedTx?.sign === 'function') {
+                preparedTx.sign(platformKeypair);
+            }
+
+            const sendResult = await rpcServer.sendTransaction(preparedTx);
+
+            if (sendResult?.status === 'PENDING' || sendResult?.status === 'OK') {
+                const txHash = sendResult.hash || sendResult.id;
+
+                logger.info('[VerificationService] On-chain verification transaction submitted', {
+                    mentorId,
+                    txHash,
+                });
+
+                return txHash;
+            }
+
+            logger.error('[VerificationService] On-chain verification transaction rejected', {
+                mentorId,
+                status: sendResult?.status,
+            });
+            throw new Error(`Verification transaction rejected with status: ${sendResult?.status}`);
+
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            logger.error('[VerificationService] On-chain verification failed', {
+                mentorId,
+                error: errorMessage,
+            });
+            throw new Error(`On-chain verification failed: ${errorMessage}`);
+        }
     },
 };

@@ -9,8 +9,9 @@ import {
   updateUserSchema,
   updateMeSchema,
   avatarUploadSchema,
-} from "../validators/schemas/users.schemas";
-import { idParamSchema } from "../validators/schemas/common.schemas";
+} from '../validators/schemas/users.schemas';
+import { idParamSchema } from '../validators/schemas/common.schemas';
+import { RecommendationController } from '../controllers/recommendation.controller';
 
 const router = Router();
 
@@ -315,6 +316,21 @@ router.delete(
   validate(idParamSchema),
   requireOwnerOrAdmin,
   asyncHandler(UsersController.deleteUser),
+);
+
+router.get(
+  '/recommendations/mentors',
+  asyncHandler(RecommendationController.getMentorRecommendations),
+);
+
+router.post(
+  '/recommendations/dismiss/:mentorId',
+  asyncHandler(RecommendationController.dismissMentor),
+);
+
+router.post(
+  '/recommendations/click/:mentorId',
+  asyncHandler(RecommendationController.logRecommendationClick),
 );
 
 export default router;

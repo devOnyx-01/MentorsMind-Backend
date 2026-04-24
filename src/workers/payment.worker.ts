@@ -25,8 +25,8 @@ export async function pollPaymentStatus(
   // Fetch current payment status from DB
   const { rows } = await pool.query<{
     status: string;
-    stellar_tx_hash: string | null;
-  }>("SELECT status, stellar_tx_hash FROM transactions WHERE id = $1", [
+    transaction_hash: string | null;
+  }>("SELECT status, transaction_hash FROM transactions WHERE id = $1", [
     paymentId,
   ]);
 

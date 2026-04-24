@@ -1,12 +1,13 @@
-import { Queue, Worker, Job } from "bullmq";
-import config from "../config";
-import { ExportService } from "../services/export.service";
-import { ExportJobModel } from "../models/export-job.model";
-import { AuditLoggerService } from "../services/audit-logger.service";
-import { LogLevel } from "../utils/log-formatter.utils";
-import { logger } from "../utils/logger";
+import { Queue, Worker, Job } from 'bullmq';
+import config from '../config';
+import { ExportService } from '../services/export.service';
+import { EarningsReportService } from '../services/earningsReport.service';
+import { ExportJobModel } from '../models/export-job.model';
+import { AuditLoggerService } from '../services/audit-logger.service';
+import { LogLevel } from '../utils/log-formatter.utils';
+import { logger } from '../utils/logger';
 
-const redisUrl = config.redis.url || "redis://localhost:6379";
+const redisUrl = config.redis.url || 'redis://localhost:6379';
 const url = new URL(redisUrl);
 
 const connection = {
@@ -20,12 +21,13 @@ export const exportQueue = new Queue("export-queue", { connection });
 export const exportWorker = new Worker(
   "export-queue",
   async (job: Job) => {
-    const { userId, jobId } = job.data;
-
-    if (job.name === "process-data-export") {
-      const { runDataExportJob } = await import("../jobs/dataExport.job");
-      await runDataExportJob(job);
+    const { userId, jobId, type } = job.data;
+    
+    if (type === 'earnings-export') {
+      const { format, period, startDate, endDate } = job.data;
+      await EarningsReportService.processQueuedExport(jobId, userId, format, period, startDate, endDate);
     } else {
+      // Regular data export
       await ExportService.processExport(userId, jobId);
     }
   },
