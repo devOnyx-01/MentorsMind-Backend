@@ -7,6 +7,7 @@ import {
   ICalSession,
 } from "../utils/ical.utils";
 import { logger } from "../utils/logger";
+import { EncryptionUtil } from "../utils/encryption.utils";
 
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
@@ -136,17 +137,27 @@ export const CalendarService = {
   async connectGoogleCalendar(userId: string, code: string): Promise<void> {
     const { tokens } = await oauth2Client.getToken(code);
 
+    const [encAccess, encRefresh, version] = await Promise.all([
+      EncryptionUtil.encrypt(tokens.access_token),
+      EncryptionUtil.encrypt(tokens.refresh_token),
+      EncryptionUtil.getCurrentKeyVersion(),
+    ]);
+
     await pool.query(
       `UPDATE users
-       SET google_calendar_access_token  = $1,
-           google_calendar_refresh_token = $2,
-           google_calendar_token_expiry  = $3,
-           google_calendar_connected     = true
-       WHERE id = $4`,
+       SET google_calendar_access_token  = NULL,
+           google_calendar_refresh_token = NULL,
+           google_calendar_token_expiry  = $1,
+           google_calendar_connected     = true,
+           encrypted_access_token        = $2,
+           encrypted_refresh_token       = $3,
+           pii_encryption_version        = $4
+       WHERE id = $5`,
       [
-        tokens.access_token,
-        tokens.refresh_token ?? null,
         tokens.expiry_date ? new Date(tokens.expiry_date) : null,
+        encAccess,
+        encRefresh,
+        version,
         userId,
       ],
     );
@@ -161,7 +172,9 @@ export const CalendarService = {
        SET google_calendar_access_token  = NULL,
            google_calendar_refresh_token = NULL,
            google_calendar_token_expiry  = NULL,
-           google_calendar_connected     = false
+           google_calendar_connected     = false,
+           encrypted_access_token        = NULL,
+           encrypted_refresh_token       = NULL
        WHERE id = $1`,
       [userId],
     );
@@ -175,13 +188,20 @@ export const CalendarService = {
    */
   async _buildAuthedClient(userId: string) {
     const { rows } = await pool.query(
-      `SELECT google_calendar_access_token  AS access_token,
-              google_calendar_refresh_token AS refresh_token,
-              google_calendar_token_expiry  AS expiry_date
+      `SELECT encrypted_access_token,
+              encrypted_refresh_token,
+              google_calendar_token_expiry AS expiry_date
        FROM users WHERE id = $1`,
       [userId],
     );
-    if (!rows[0]?.access_token) return null;
+    if (!rows[0]?.encrypted_access_token) return null;
+
+    const [accessToken, refreshToken] = await Promise.all([
+      EncryptionUtil.decrypt(rows[0].encrypted_access_token),
+      EncryptionUtil.decrypt(rows[0].encrypted_refresh_token),
+    ]);
+
+    if (!accessToken) return null;
 
     const client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
@@ -189,8 +209,8 @@ export const CalendarService = {
       process.env.GOOGLE_REDIRECT_URI,
     );
     client.setCredentials({
-      access_token: rows[0].access_token,
-      refresh_token: rows[0].refresh_token,
+      access_token: accessToken,
+      refresh_token: refreshToken ?? undefined,
       expiry_date: rows[0].expiry_date
         ? new Date(rows[0].expiry_date).getTime()
         : undefined,
@@ -198,14 +218,20 @@ export const CalendarService = {
 
     // Persist refreshed tokens automatically
     client.on("tokens", async (freshTokens) => {
+      const encAccess = await EncryptionUtil.encrypt(freshTokens.access_token);
+      const version = await EncryptionUtil.getCurrentKeyVersion();
+
       await pool.query(
         `UPDATE users
-         SET google_calendar_access_token = $1,
-             google_calendar_token_expiry = $2
-         WHERE id = $3`,
+         SET google_calendar_access_token = NULL,
+             encrypted_access_token = $1,
+             google_calendar_token_expiry = $2,
+             pii_encryption_version = $3
+         WHERE id = $4`,
         [
-          freshTokens.access_token,
+          encAccess,
           freshTokens.expiry_date ? new Date(freshTokens.expiry_date) : null,
+          version,
           userId,
         ],
       );
@@ -282,14 +308,17 @@ export const CalendarService = {
         });
 
         // Store the event ID on the booking (one column per participant)
-        const column =
-          participantId === booking.mentor_id
-            ? "google_event_id_mentor"
-            : "google_event_id_learner";
-        await pool.query(`UPDATE bookings SET ${column} = $1 WHERE id = $2`, [
-          data.id,
-          bookingId,
-        ]);
+        if (participantId === booking.mentor_id) {
+          await pool.query(
+            "UPDATE bookings SET google_event_id_mentor = $1 WHERE id = $2",
+            [data.id, bookingId],
+          );
+        } else {
+          await pool.query(
+            "UPDATE bookings SET google_event_id_learner = $1 WHERE id = $2",
+            [data.id, bookingId],
+          );
+        }
       } catch (err) {
         logger.error("Failed to create Google Calendar event", {
           bookingId,

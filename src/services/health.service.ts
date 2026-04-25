@@ -23,6 +23,7 @@ export interface DetailedHealthStatus {
     db: HealthComponent;
     redis: HealthComponent;
     horizon: HealthComponent;
+    queues: HealthComponent;
     system?: HealthComponent;
   };
   uptime: number;
@@ -72,10 +73,11 @@ export class HealthService {
    * Internal full health check
    */
   private static async performFullCheck(): Promise<DetailedHealthStatus> {
-    const [dbCheck, redisCheck, horizonCheck] = await Promise.all([
+    const [dbCheck, redisCheck, horizonCheck, queueCheck] = await Promise.all([
       this.checkDatabase(),
       this.checkRedis(),
       this.checkHorizon(),
+      this.checkBullMQ(),
     ]);
 
     // Critical components for readiness: all must not be 'unhealthy'
@@ -100,6 +102,7 @@ export class HealthService {
         db: dbCheck,
         redis: redisCheck,
         horizon: horizonCheck,
+        queues: queueCheck,
         system: this.getSystemInfo(),
       },
       uptime: process.uptime(),
@@ -125,20 +128,53 @@ export class HealthService {
   private static async checkRedis(): Promise<HealthComponent> {
     const start = Date.now();
     if (!redisConfig.url) {
-        return { status: 'degraded', error: 'Redis URL not configured' };
+      return { status: "degraded", error: "Redis URL not configured" };
     }
     try {
-      const Redis = (await import('ioredis')).default;
-      const client = new Redis(redisConfig.url, { ...redisConfig.options, lazyConnect: true });
+      const Redis = (await import("ioredis")).default;
+      const client = new Redis(redisConfig.url, {
+        ...redisConfig.options,
+        lazyConnect: true,
+      });
       await client.connect();
-      await client.ping();
+      const pong = await client.ping();
       client.disconnect();
-      return { status: 'healthy', responseTimeMs: Date.now() - start };
+
+      if (pong !== "PONG") {
+        throw new Error(`Redis ping failed with response: ${pong}`);
+      }
+
+      return { status: "healthy", responseTimeMs: Date.now() - start };
     } catch (err: any) {
-      return { 
-        status: 'unhealthy', 
-        responseTimeMs: Date.now() - start, 
-        error: err.message 
+      return {
+        status: "unhealthy",
+        responseTimeMs: Date.now() - start,
+        error: err.message,
+      };
+    }
+  }
+
+  private static async checkBullMQ(): Promise<HealthComponent> {
+    const start = Date.now();
+    try {
+      // Use the email queue as a representative check
+      const { emailQueue } = await import("../queues/email.queue");
+      const counts = await emailQueue.getJobCounts(
+        "active",
+        "waiting",
+        "completed",
+        "failed",
+      );
+      return {
+        status: "healthy",
+        responseTimeMs: Date.now() - start,
+        details: { active: counts.active, waiting: counts.waiting },
+      };
+    } catch (err: any) {
+      return {
+        status: "degraded",
+        responseTimeMs: Date.now() - start,
+        error: err.message,
       };
     }
   }
@@ -159,13 +195,27 @@ export class HealthService {
 
   private static getSystemInfo(): HealthComponent {
     return {
-      status: 'healthy',
+      status: "healthy",
       details: {
         memory: process.memoryUsage(),
         cpu: os.loadavg(),
         freeMem: os.freemem(),
         totalMem: os.totalmem(),
-      }
+      },
+    };
+  }
+
+  /**
+   * Returns a simplified health object as requested.
+   */
+  static async getSimplifiedStatus(): Promise<any> {
+    const status = await this.checkReadiness();
+    return {
+      stellar: status.components.horizon.status === "healthy" ? "OK" : "DOWN",
+      redis: status.components.redis.status === "healthy" ? "OK" : "DOWN",
+      queues: {
+        active: status.components.queues.details?.active ?? 0,
+      },
     };
   }
 

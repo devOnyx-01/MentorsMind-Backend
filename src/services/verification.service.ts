@@ -73,31 +73,8 @@ const VERIFICATION_COLUMNS = `
 `;
 
 export const VerificationService = {
-    async initialize(): Promise<void> {
-        await pool.query(`
-      CREATE TABLE IF NOT EXISTS mentor_verifications (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        mentor_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        document_type VARCHAR(50) NOT NULL,
-        document_url VARCHAR(500) NOT NULL,
-        credential_url VARCHAR(500),
-        linkedin_url VARCHAR(500),
-        additional_notes TEXT,
-        status VARCHAR(30) NOT NULL DEFAULT 'pending',
-        reviewed_by UUID REFERENCES users(id),
-        reviewed_at TIMESTAMP WITH TIME ZONE,
-        rejection_reason TEXT,
-        additional_info_request TEXT,
-        on_chain_tx_hash VARCHAR(100),
-        on_chain_pending BOOLEAN DEFAULT FALSE,
-        expires_at TIMESTAMP WITH TIME ZONE,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-      );
-      CREATE INDEX IF NOT EXISTS idx_mentor_verifications_mentor_id ON mentor_verifications(mentor_id);
-      CREATE INDEX IF NOT EXISTS idx_mentor_verifications_status ON mentor_verifications(status);
-    `);
-    },
+    // initialize() removed - schema management moved to migrations
+
 
     /** POST /mentors/verification/submit */
     async submit(mentorId: string, input: SubmitVerificationInput): Promise<VerificationRecord> {
