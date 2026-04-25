@@ -118,6 +118,9 @@ const envSchema = z.object({
   // Secrets management
   SECRETS_PROVIDER: z.enum(["env", "aws", "vault"]).default("env"),
   AWS_REGION: z.string().default("us-east-1"),
+  AWS_S3_BUCKET: z.string().min(1, "AWS_S3_BUCKET is required"),
+  AWS_ACCESS_KEY_ID: z.string().min(1, "AWS_ACCESS_KEY_ID is required"),
+  AWS_SECRET_ACCESS_KEY: z.string().min(1, "AWS_SECRET_ACCESS_KEY is required"),
   AWS_SECRET_ID: z.string().optional(),
   VAULT_ADDR: z.string().url().optional(),
   VAULT_TOKEN: z.string().optional(),
@@ -142,6 +145,7 @@ const SENSITIVE_KEYS = new Set([
   "FIREBASE_PRIVATE_KEY",
   "VAULT_TOKEN",
   "AWS_SECRET_ID",
+  "AWS_SECRET_ACCESS_KEY",
   "ENCRYPTION_KEY",
 ]);
 

@@ -89,6 +89,7 @@ export const VerificationService = {
         rejection_reason TEXT,
         additional_info_request TEXT,
         on_chain_tx_hash VARCHAR(100),
+        on_chain_pending BOOLEAN DEFAULT FALSE,
         expires_at TIMESTAMP WITH TIME ZONE,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -223,14 +224,15 @@ export const VerificationService = {
         expiresAt.setFullYear(expiresAt.getFullYear() + 1);
 
         const onChainTxHash = await this.triggerOnChainVerification(verification.mentor_id);
+        const onChainPending = onChainTxHash === null;
 
         const { rows } = await pool.query<VerificationRecord>(
             `UPDATE mentor_verifications
        SET status = 'approved', reviewed_by = $1, reviewed_at = NOW(),
-           expires_at = $2, on_chain_tx_hash = $3, updated_at = NOW()
-       WHERE id = $4
+           expires_at = $2, on_chain_tx_hash = $3, on_chain_pending = $4, updated_at = NOW()
+       WHERE id = $5
        RETURNING *`,
-            [adminId, expiresAt, onChainTxHash, verificationId],
+            [adminId, expiresAt, onChainTxHash, onChainPending, verificationId],
         );
 
         await pool.query(
@@ -314,26 +316,69 @@ export const VerificationService = {
 
     /** Cron: flag verifications past their expiry date */
     async flagExpiredVerifications(): Promise<number> {
-        const { rowCount } = await pool.query(
-            `UPDATE mentor_verifications
-       SET status = 'expired', updated_at = NOW()
-       WHERE status = 'approved' AND expires_at < NOW()`,
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+
+            const { rowCount } = await client.query(
+                `WITH expired_verifications AS (
+                   UPDATE mentor_verifications
+                   SET status = 'expired', updated_at = NOW()
+                   WHERE status = 'approved' AND expires_at < NOW()
+                   RETURNING mentor_id
+                 )
+                 UPDATE users
+                 SET is_verified = FALSE, updated_at = NOW()
+                 FROM expired_verifications
+                 WHERE users.id = expired_verifications.mentor_id`
+            );
+
+            await client.query('COMMIT');
+
+            const count = rowCount ?? 0;
+            if (count > 0) {
+                logger.info('[VerificationService] Expired verifications flagged', { count });
+            }
+
+            return count;
+        } catch (err) {
+            await client.query('ROLLBACK');
+            throw err;
+        } finally {
+            client.release();
+        }
+    },
+
+    /** Background Job: Retry pending on-chain verifications */
+    async retryPendingOnChainVerifications(): Promise<number> {
+        const { rows } = await pool.query<VerificationRecord>(
+            `SELECT * FROM mentor_verifications WHERE on_chain_pending = TRUE`
         );
 
-        const count = rowCount ?? 0;
-
-        if (count > 0) {
-            await pool.query(
-                `UPDATE users SET is_verified = FALSE, updated_at = NOW()
-         WHERE id IN (
-           SELECT mentor_id FROM mentor_verifications
-           WHERE status = 'expired' AND updated_at >= NOW() - INTERVAL '1 minute'
-         )`,
-            );
-            logger.info('[VerificationService] Expired verifications flagged', { count });
+        let successCount = 0;
+        for (const verification of rows) {
+            try {
+                const txHash = await this.triggerOnChainVerification(verification.mentor_id);
+                if (txHash) {
+                    await pool.query(
+                        `UPDATE mentor_verifications SET on_chain_tx_hash = $1, on_chain_pending = FALSE, updated_at = NOW() WHERE id = $2`,
+                        [txHash, verification.id]
+                    );
+                    successCount++;
+                }
+            } catch (err) {
+                logger.warn('[VerificationService] Retry on-chain verification failed', {
+                    verificationId: verification.id,
+                    error: err instanceof Error ? err.message : String(err)
+                });
+            }
         }
-
-        return count;
+        
+        if (successCount > 0) {
+            logger.info('[VerificationService] Retried pending on-chain verifications', { successCount });
+        }
+        
+        return successCount;
     },
 
     async sendStatusEmail(

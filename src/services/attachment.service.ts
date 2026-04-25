@@ -1,10 +1,19 @@
 import path from 'path';
-import fs from 'fs';
 import crypto from 'crypto';
 import pool from '../config/database';
 import { SocketService } from './socket.service';
 import { MessagingService } from './messaging.service';
 import { logger } from '../utils/logger.utils';
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+
+const s3 = new S3Client({
+  region: process.env.AWS_REGION || 'us-east-1',
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
+  },
+});
 
 const DAILY_QUOTA_BYTES = 50 * 1024 * 1024; // 50 MB
 
@@ -12,8 +21,6 @@ const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const ALLOWED_DOC_TYPES = ['application/pdf'];
 const IMAGE_MAX_BYTES = 10 * 1024 * 1024; // 10 MB
 const DOC_MAX_BYTES = 20 * 1024 * 1024;   // 20 MB
-
-const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(process.cwd(), 'uploads');
 
 export interface AttachmentRecord {
   id: string;
@@ -91,7 +98,7 @@ export const AttachmentService = {
   },
 
   /**
-   * Persist a file to local disk (swap body for S3/GCS SDK in production).
+   * Persist a file to S3.
    */
   async storeFile(
     fileBuffer: Buffer,
@@ -99,15 +106,17 @@ export const AttachmentService = {
   ): Promise<{ storageKey: string; bucket: string }> {
     const ext = path.extname(originalName) || '';
     const storageKey = `${crypto.randomUUID()}${ext}`;
-    const bucket = 'attachments';
-    const destDir = path.join(UPLOAD_DIR, bucket);
+    const bucket = process.env.AWS_S3_BUCKET || 'attachments';
 
-    if (!fs.existsSync(destDir)) {
-      fs.mkdirSync(destDir, { recursive: true });
-    }
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: storageKey,
+        Body: fileBuffer,
+      })
+    );
 
-    fs.writeFileSync(path.join(destDir, storageKey), fileBuffer);
-    logger.debug('AttachmentService: file stored', { storageKey });
+    logger.debug('AttachmentService: file stored to S3', { storageKey });
 
     return { storageKey, bucket };
   },
@@ -128,17 +137,14 @@ export const AttachmentService = {
   },
 
   /**
-   * Generate a signed URL valid for 1 hour.
-   * Uses HMAC-SHA256 to sign storage key + expiry timestamp.
+   * Generate a signed URL valid for 1 hour using AWS SDK.
    */
-  generateSignedUrl(storageKey: string, bucket: string): string {
-    const expiresAt = Math.floor(Date.now() / 1000) + 3600;
-    const token = crypto
-      .createHmac('sha256', process.env.JWT_SECRET || 'secret')
-      .update(`${storageKey}:${expiresAt}`)
-      .digest('hex');
-    const baseUrl = process.env.APP_BASE_URL || 'http://localhost:3000';
-    return `${baseUrl}/api/v1/files/${bucket}/${storageKey}?expires=${expiresAt}&token=${token}`;
+  async generateSignedUrl(storageKey: string, bucket: string): Promise<string> {
+    const command = new GetObjectCommand({
+      Bucket: bucket,
+      Key: storageKey,
+    });
+    return getSignedUrl(s3, command, { expiresIn: 3600 });
   },
 
   /**
@@ -172,8 +178,11 @@ export const AttachmentService = {
 
     if (!message) {
       // Clean up orphaned file
-      const filePath = path.join(UPLOAD_DIR, bucket, storageKey);
-      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      try {
+        await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: storageKey }));
+      } catch (err) {
+        logger.warn('Failed to cleanup orphaned file', { err });
+      }
       return null;
     }
 
@@ -197,7 +206,7 @@ export const AttachmentService = {
     );
 
     const attachment = rows[0];
-    attachment.signed_url = this.generateSignedUrl(storageKey, bucket);
+    attachment.signed_url = await this.generateSignedUrl(storageKey, bucket);
 
     // Emit attachment notification to recipient
     const conv = await MessagingService.getConversation(conversationId, uploaderId);
@@ -233,16 +242,18 @@ export const AttachmentService = {
     );
 
     for (const att of rows) {
-      const filePath = path.join(UPLOAD_DIR, att.storage_bucket, att.storage_key);
-      if (fs.existsSync(filePath)) {
-        try {
-          fs.unlinkSync(filePath);
-        } catch (err) {
-          logger.warn('AttachmentService: failed to delete file', {
-            storageKey: att.storage_key,
-            err,
-          });
-        }
+      try {
+        await s3.send(
+          new DeleteObjectCommand({
+            Bucket: att.storage_bucket,
+            Key: att.storage_key,
+          })
+        );
+      } catch (err) {
+        logger.warn('AttachmentService: failed to delete file from S3', {
+          storageKey: att.storage_key,
+          err,
+        });
       }
     }
 

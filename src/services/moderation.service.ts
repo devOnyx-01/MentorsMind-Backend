@@ -105,7 +105,7 @@ export const ModerationService = {
    */
   async hideContent(entityType: string, entityId: string): Promise<void> {
     if (entityType === "review") {
-      await pool.query(`UPDATE reviews SET is_visible = false WHERE id = $1`, [
+      await pool.query(`UPDATE reviews SET is_published = false WHERE id = $1`, [
         entityId,
       ]);
     } else if (
@@ -124,7 +124,7 @@ export const ModerationService = {
    */
   async showContent(entityType: string, entityId: string): Promise<void> {
     if (entityType === "review") {
-      await pool.query(`UPDATE reviews SET is_visible = true WHERE id = $1`, [
+      await pool.query(`UPDATE reviews SET is_published = true WHERE id = $1`, [
         entityId,
       ]);
     } else if (
