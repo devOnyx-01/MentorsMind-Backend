@@ -17,12 +17,6 @@ import {
   NotificationPriority,
 } from "../models/notifications.model";
 
-const oauth2Client = new google.auth.OAuth2(
-  process.env.GOOGLE_CLIENT_ID,
-  process.env.GOOGLE_CLIENT_SECRET,
-  process.env.GOOGLE_REDIRECT_URI,
-);
-
 const GOOGLE_SCOPES = ["https://www.googleapis.com/auth/calendar.events"];
 
 // ---------------------------------------------------------------------------
@@ -35,6 +29,47 @@ function isInvalidGrantError(error: unknown): boolean {
     return msg.includes("invalid_grant");
   }
   return false;
+}
+
+function createOAuth2Client(): InstanceType<typeof google.auth.OAuth2> {
+  return new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    process.env.GOOGLE_REDIRECT_URI,
+  );
+}
+
+async function persistGoogleCredentials(
+  userId: string,
+  accessToken: string | undefined,
+  refreshToken: string | undefined,
+  expiryDateMs: number | undefined,
+): Promise<void> {
+  if (!accessToken) return;
+
+  const [encAccess, version, encRefresh] = await Promise.all([
+    EncryptionUtil.encrypt(accessToken),
+    EncryptionUtil.getCurrentKeyVersion(),
+    refreshToken ? EncryptionUtil.encrypt(refreshToken) : Promise.resolve(null),
+  ]);
+
+  await pool.query(
+    `UPDATE users
+       SET google_calendar_access_token  = NULL,
+           google_calendar_refresh_token = NULL,
+           google_calendar_token_expiry  = $1,
+           encrypted_access_token        = $2,
+           encrypted_refresh_token       = COALESCE($3, encrypted_refresh_token),
+           pii_encryption_version        = $4
+     WHERE id = $5`,
+    [
+      expiryDateMs ? new Date(expiryDateMs) : null,
+      encAccess,
+      encRefresh,
+      version,
+      userId,
+    ],
+  );
 }
 
 async function disconnectExpiredCalendar(userId: string): Promise<void> {
@@ -177,6 +212,7 @@ export const CalendarService = {
     // Store CSRF in Redis with 10-minute TTL
     await redis.set(`google_oauth_csrf:${userId}`, csrf, "EX", 600);
 
+    const oauth2Client = createOAuth2Client();
     return oauth2Client.generateAuthUrl({
       access_type: "offline",
       scope: GOOGLE_SCOPES,
@@ -204,6 +240,7 @@ export const CalendarService = {
    * Exchange an OAuth2 code for tokens and persist them for the user
    */
   async connectGoogleCalendar(userId: string, code: string): Promise<void> {
+    const oauth2Client = createOAuth2Client();
     const { tokens } = await oauth2Client.getToken(code);
 
     const [encAccess, encRefresh, version] = await Promise.all([
@@ -272,38 +309,13 @@ export const CalendarService = {
 
     if (!accessToken) return null;
 
-    const client = new google.auth.OAuth2(
-      process.env.GOOGLE_CLIENT_ID,
-      process.env.GOOGLE_CLIENT_SECRET,
-      process.env.GOOGLE_REDIRECT_URI,
-    );
+    const client = createOAuth2Client();
     client.setCredentials({
       access_token: accessToken,
       refresh_token: refreshToken ?? undefined,
       expiry_date: rows[0].expiry_date
         ? new Date(rows[0].expiry_date).getTime()
         : undefined,
-    });
-
-    // Persist refreshed tokens automatically
-    client.on("tokens", async (freshTokens) => {
-      const encAccess = await EncryptionUtil.encrypt(freshTokens.access_token);
-      const version = await EncryptionUtil.getCurrentKeyVersion();
-
-      await pool.query(
-        `UPDATE users
-         SET google_calendar_access_token = NULL,
-             encrypted_access_token = $1,
-             google_calendar_token_expiry = $2,
-             pii_encryption_version = $3
-         WHERE id = $4`,
-        [
-          encAccess,
-          freshTokens.expiry_date ? new Date(freshTokens.expiry_date) : null,
-          version,
-          userId,
-        ],
-      );
     });
 
     // Proactively refresh if the access token is expired
@@ -313,6 +325,12 @@ export const CalendarService = {
     if (expiryDate && Date.now() >= expiryDate) {
       try {
         await client.refreshAccessToken();
+        await persistGoogleCredentials(
+          userId,
+          client.credentials.access_token,
+          client.credentials.refresh_token,
+          client.credentials.expiry_date,
+        );
       } catch (err) {
         if (isInvalidGrantError(err)) {
           logger.warn("Google Calendar refresh token invalid_grant", {
