@@ -436,8 +436,8 @@ The final `runner` image uses Debian slim and `npm ci --omit=dev`. If the image 
 
 ## 💰 Bounty Contribution
 
-- **Task:** TokenService.rotateRefreshToken Theft Detection Checks replaced_by IS NOT NULL B
-- **Reward:** $1
+- **Task:** UsersService.update Builds Broken SQL (Missing $ on Parameter Placeholders)
+- **Reward:** $2
 - **Source:** GitHub-Paid
 - **Date:** 2026-04-27
 
