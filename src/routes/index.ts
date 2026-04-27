@@ -14,7 +14,6 @@ import conversationsRoutes from "./conversations.routes";
 import messageSearchRoutes from "./messageSearch.routes";
 import integrationsRoutes from "./integrations.routes";
 import { BookingsService } from "../services/bookings.service";
-import { VerificationService } from "../services/verification.service";
 import { notificationCleanupService } from "../services/notification-cleanup.service";
 import {
   CURRENT_VERSION,
@@ -29,14 +28,11 @@ import { monitoringConfig } from "../config/monitoring.config";
 
 const router = Router();
 
-// Initialize bookings tables (async, don't block)
+// Service initialization (async, non-blocking)
+// Note: These services no longer create tables at runtime.
+// Table schema is managed exclusively by migration files.
 BookingsService.initialize().catch((err: unknown) => {
-  logger.error("Failed to initialize bookings tables:", err);
-});
-
-// Initialize verification tables (async, don't block)
-VerificationService.initialize().catch((err) => {
-  logger.error("Failed to initialize verification tables:", err);
+  logger.error("Failed to initialize bookings service:", err);
 });
 
 // Initialize notification cleanup service (async, don't block)

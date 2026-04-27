@@ -49,22 +49,12 @@ describe("BookingsService", () => {
   });
 
   describe("initialize", () => {
-    it("inicializa la tabla de reservas", async () => {
-      mockBookingModel.initializeTable.mockResolvedValue(undefined);
-
+    it("inicializa el servicio de reservas sin crear tablas", async () => {
+      // Initialize no longer calls initializeTable - only starts background jobs
       await BookingsService.initialize();
 
-      expect(mockBookingModel.initializeTable).toHaveBeenCalled();
-    });
-
-    it("propaga error de inicialización", async () => {
-      mockBookingModel.initializeTable.mockRejectedValue(
-        new Error("migration failed"),
-      );
-
-      await expect(BookingsService.initialize()).rejects.toThrow(
-        "migration failed",
-      );
+      // Verify that initializeTable is NOT called (schema managed by migrations)
+      expect(mockBookingModel.initializeTable).not.toHaveBeenCalled();
     });
   });
 

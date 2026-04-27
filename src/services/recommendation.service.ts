@@ -55,39 +55,10 @@ export interface RecommendationEvent {
 }
 
 class RecommendationServiceImpl {
-    async initialize(): Promise<void> {
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS recommendation_events (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                event_type VARCHAR(20) NOT NULL,
-                learner_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                mentor_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                context JSONB DEFAULT '{}'::jsonb,
-                scoring JSONB DEFAULT '{}'::jsonb,
-                position INTEGER,
-                booking_id UUID REFERENCES bookings(id) ON DELETE SET NULL,
-                session_id VARCHAR(255),
-                user_agent TEXT,
-                ip_address VARCHAR(45),
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_recommendation_events_learner_id ON recommendation_events(learner_id);
-            CREATE INDEX IF NOT EXISTS idx_recommendation_events_event_type ON recommendation_events(event_type);
-
-            CREATE TABLE IF NOT EXISTS dismissed_recommendations (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                learner_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                mentor_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                reason VARCHAR(255),
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-                CONSTRAINT unique_dismissed_mentor UNIQUE (learner_id, mentor_id)
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_dismissed_recommendations_learner_id ON dismissed_recommendations(learner_id);
-        `);
-        logger.info('[RecommendationService] Initialized recommendation tables');
-    }
+    /**
+     * Initialize method removed - table schema is now managed by migrations.
+     * See: database/migrations/034_create_recommendation_events.sql
+     */
 
     async getRecommendedMentors(learnerId: string, limit = 5): Promise<MentorRecommendation[]> {
         const cacheKey = CacheKeys.recommendationMentors(learnerId);
