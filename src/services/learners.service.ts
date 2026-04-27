@@ -18,6 +18,9 @@ export interface TimelineEntry {
 
 export class LearnerService {
   private static CACHE_TTL = 300; // 5 minutes
+  private static PROGRESS_CACHE_PREFIX = 'learner:progress';
+  private static TIMELINE_CACHE_PREFIX = 'learner:timeline';
+  private static GOAL_TIMELINE_CACHE_PREFIX = 'learner:goal-timeline';
 
   static async getProgressSummary(learnerId: string): Promise<ProgressSummary> {
     const cacheKey = `learner:progress:${learnerId}`;
@@ -105,7 +108,11 @@ export class LearnerService {
   }
 
   static async invalidateCache(learnerId: string): Promise<void> {
-    await CacheService.del(`learner:progress:${learnerId}`);
+    await Promise.all([
+      CacheService.del(`${this.PROGRESS_CACHE_PREFIX}:${learnerId}`),
+      CacheService.del(`${this.TIMELINE_CACHE_PREFIX}:${learnerId}`),
+      CacheService.del(`${this.GOAL_TIMELINE_CACHE_PREFIX}:${learnerId}`),
+    ]);
   }
 
   private static calculateStreaks(dates: Date[]): {
