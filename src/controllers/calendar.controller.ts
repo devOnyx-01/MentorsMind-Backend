@@ -1,6 +1,7 @@
 import { Response } from "express";
 import { AuthenticatedRequest } from "../types/api.types";
 import { CalendarService } from "../services/calendar.service";
+import { env } from "../config/env";
 import { createError } from "../middleware/errorHandler";
 
 export const CalendarController = {
@@ -38,7 +39,7 @@ export const CalendarController = {
       status: "success",
       message: "iCal token regenerated. Your old feed URL is now invalid.",
       data: {
-        icalUrl: `${process.env.APP_BASE_URL}/api/v1/calendar/ical/${token}`,
+        icalUrl: `${env.APP_BASE_URL}/api/v1/calendar/ical/${token}`,
       },
     });
   },
@@ -54,7 +55,7 @@ export const CalendarController = {
     res.json({
       status: "success",
       data: {
-        icalUrl: `${process.env.APP_BASE_URL}/api/v1/calendar/ical/${token}`,
+        icalUrl: `${env.APP_BASE_URL}/api/v1/calendar/ical/${token}`,
       },
     });
   },
@@ -112,7 +113,7 @@ export const CalendarController = {
 
     // Redirect to a success page in the client app
     res.redirect(
-      `${process.env.APP_CLIENT_URL}/settings/calendar?connected=true`,
+      `${env.APP_CLIENT_URL}/settings/calendar?connected=true`,
     );
   },
 
