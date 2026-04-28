@@ -43,26 +43,44 @@ const REQUIRED_TABLES = [
   'dispute_evidence',
   'system_configs',
   'audit_logs',
+  'export_jobs',
   
   // Communication tables
   'notifications',
   'conversations',
   'messages',
+  'message_attachments',
+  'notification_templates',
+  'notification_delivery_tracking',
+  'notification_analytics',
+  'push_tokens',
   
   // Verification and goals
   'mentor_verifications',
   'goals',
+  'goal_bookings',
+  
+  // Recommendation tables
+  'recommendation_events',
+  'dismissed_recommendations',
   
   // Additional operational tables
   'refresh_tokens',
   'reviews',
-  'push_tokens',
   'oauth_accounts',
   'user_sessions',
   'webhooks',
   'webhook_deliveries',
   'api_keys',
   'consent_records',
+  'session_notes',
+  'data_export_requests',
+  'flags',
+  'ip_rules',
+  'stellar_operations',
+  'conversations',
+  'messages',
+  'message_attachments',
 ];
 
 /**
