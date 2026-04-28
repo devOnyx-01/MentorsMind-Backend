@@ -25,21 +25,21 @@ async function generateWeeklyEarningsReport(
 
   if (mentorId) {
     params.push(mentorId);
-    mentorFilter = `AND s.mentor_id = $${params.length}`;
+    mentorFilter = `AND b.mentor_id = $${params.length}`;
   }
 
   const { rows } = await pool.query(
     `SELECT
-       s.mentor_id,
-       COUNT(p.id)::int          AS total_sessions,
-       COALESCE(SUM(p.amount), 0) AS gross_earnings,
-       COALESCE(SUM(p.amount * 0.95), 0) AS net_earnings
-     FROM transactions p
-     JOIN sessions s ON p.user_id = s.learner_id
-     WHERE p.created_at BETWEEN $1 AND $2
-       AND p.status = 'completed'
+       b.mentor_id,
+       COUNT(b.id)::int          AS total_sessions,
+       COALESCE(SUM(t.amount), 0) AS gross_earnings,
+       COALESCE(SUM(t.amount * 0.95), 0) AS net_earnings
+     FROM transactions t
+     JOIN bookings b ON t.id = b.payment_transaction_id
+     WHERE t.created_at BETWEEN $1 AND $2
+       AND t.status = 'completed'
        ${mentorFilter}
-     GROUP BY s.mentor_id
+     GROUP BY b.mentor_id
      ORDER BY gross_earnings DESC`,
     params,
   );
