@@ -2,7 +2,7 @@
 import pool from '../config/database';
 import { JwtUtils, TokenPayload, DecodedToken } from '../utils/jwt.utils';
 import crypto from 'crypto';
-import { WsService } from './ws.service';
+import { SocketService } from './socket.service';
 import { EmailService } from './email.service';
 
 const emailService = new EmailService();
@@ -240,16 +240,13 @@ export const TokenService = {
       const deviceName = newLoginContext?.deviceName ?? 'a new device';
       const ipAddress = newLoginContext?.ipAddress ?? 'unknown';
 
-      WsService.sendToUser(userId, {
-        event: 'session:revoked',
-        data: {
-          reason: 'session_limit',
-          message:
-            'Your oldest session was signed out because a new login was detected.',
-          newLoginDevice: deviceName,
-          newLoginIp: ipAddress,
-          revokedCount: ids.length,
-        },
+      SocketService.emitToUser(userId, 'session:revoked', {
+        reason: 'session_limit',
+        message:
+          'Your oldest session was signed out because a new login was detected.',
+        newLoginDevice: deviceName,
+        newLoginIp: ipAddress,
+        revokedCount: ids.length,
       });
 
       // Send email notification if the caller supplied the user's email

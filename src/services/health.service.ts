@@ -2,6 +2,7 @@ import pool from '../config/database';
 import { server } from '../config/stellar';
 import config from '../config';
 import { redisConfig } from '../config/redis.config';
+import { CacheService } from './cache.service';
 import { logger } from '../utils/logger.utils';
 import { CURRENT_VERSION } from '../config/api-versions.config';
 import { validateRequiredTables } from '../utils/table-validator.utils';
@@ -67,7 +68,7 @@ export class HealthService {
       status,
       timestamp: now,
     };
-    
+
     return status;
   }
 
@@ -87,7 +88,7 @@ export class HealthService {
     const criticalComponents = [dbCheck, redisCheck, horizonCheck];
     const isUnhealthy = criticalComponents.some(c => c.status === 'unhealthy');
     const isDegraded = !isUnhealthy && criticalComponents.some(c => c.status === 'degraded');
-    
+
     const status: HealthStatus = isUnhealthy ? 'unhealthy' : (isDegraded ? 'degraded' : 'healthy');
 
     if (status !== 'healthy') {
@@ -121,10 +122,10 @@ export class HealthService {
       await pool.query('SELECT 1');
       return { status: 'healthy', responseTimeMs: Date.now() - start };
     } catch (err: any) {
-      return { 
-        status: 'unhealthy', 
-        responseTimeMs: Date.now() - start, 
-        error: err.message 
+      return {
+        status: 'unhealthy',
+        responseTimeMs: Date.now() - start,
+        error: err.message
       };
     }
   }
@@ -134,15 +135,15 @@ export class HealthService {
     try {
       const validation = await validateRequiredTables();
       const responseTimeMs = Date.now() - start;
-      
+
       if (validation.allTablesExist) {
-        return { 
-          status: 'healthy', 
+        return {
+          status: 'healthy',
           responseTimeMs,
           details: { totalTables: validation.totalTables },
         };
       }
-      
+
       return {
         status: 'unhealthy',
         responseTimeMs,
@@ -163,27 +164,22 @@ export class HealthService {
 
   private static async checkRedis(): Promise<HealthComponent> {
     const start = Date.now();
+
     if (!redisConfig.url) {
-      return { status: "degraded", error: "Redis URL not configured" };
+      return { status: 'degraded', error: 'Redis URL not configured' };
     }
+
+    if (!CacheService.isDistributed()) {
+      return { status: 'degraded', error: 'Redis shared client not connected' };
+    }
+
     try {
-      const Redis = (await import("ioredis")).default;
-      const client = new Redis(redisConfig.url, {
-        ...redisConfig.options,
-        lazyConnect: true,
-      });
-      await client.connect();
-      const pong = await client.ping();
-      client.disconnect();
-
-      if (pong !== "PONG") {
-        throw new Error(`Redis ping failed with response: ${pong}`);
-      }
-
-      return { status: "healthy", responseTimeMs: Date.now() - start };
+      // Ping via the shared client — no new connection created
+      await CacheService.ping();
+      return { status: 'healthy', responseTimeMs: Date.now() - start };
     } catch (err: any) {
       return {
-        status: "unhealthy",
+        status: 'unhealthy',
         responseTimeMs: Date.now() - start,
         error: err.message,
       };
@@ -221,10 +217,10 @@ export class HealthService {
       await server.ledgers().limit(1).call();
       return { status: 'healthy', responseTimeMs: Date.now() - start };
     } catch (err: any) {
-      return { 
-        status: 'degraded', 
-        responseTimeMs: Date.now() - start, 
-        error: err.message 
+      return {
+        status: 'degraded',
+        responseTimeMs: Date.now() - start,
+        error: err.message
       };
     }
   }
