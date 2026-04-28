@@ -211,6 +211,14 @@ export class CacheService {
     return redisAvailable;
   }
 
+  /** Ping the shared Redis client. Throws if the ping fails. */
+  static async ping(): Promise<void> {
+    const client = await getClient();
+    if (!client) throw new Error('Redis client unavailable');
+    const pong = await client.ping();
+    if (pong !== 'PONG') throw new Error(`Unexpected ping response: ${pong}`);
+  }
+
   /** Warm the cache by pre-populating a set of key/value pairs */
   static async warm<T>(
     entries: Array<{ key: string; ttl: number; fn: () => Promise<T> }>,

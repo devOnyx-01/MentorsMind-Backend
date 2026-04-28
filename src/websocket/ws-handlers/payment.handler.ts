@@ -1,4 +1,4 @@
-import { WsService } from '../../services/ws.service';
+import { SocketService } from '../../services/socket.service';
 import { logger } from '../../utils/logger.utils';
 
 export interface PaymentStatusPayload {
@@ -28,7 +28,7 @@ export async function notifyPaymentStatus(
   const { userId, transactionId, bookingId, status, amount, currency } =
     payload;
 
-  await WsService.publish(userId, 'payment:status', {
+  SocketService.emitToUser(userId, 'payment:status', {
     transactionId,
     bookingId,
     status,
@@ -50,8 +50,8 @@ export async function notifyEscrowUpdate(
   const data = { escrowId, bookingId, status, amount };
 
   await Promise.all([
-    WsService.publish(mentorId, 'escrow:update', data),
-    WsService.publish(menteeId, 'escrow:update', data),
+    SocketService.emitToUser(mentorId, 'escrow:update', data),
+    SocketService.emitToUser(menteeId, 'escrow:update', data),
   ]);
 
   logger.info('WS payment: escrow update', { escrowId, status });
