@@ -17,5 +17,6 @@ export { escrowReleaseWorker } from './escrow-release.worker';
 export { reportWorker } from './report.worker';
 export { sessionReminderWorker } from './sessionReminder.worker';
 export { notificationCleanupWorker } from './notificationCleanup.worker';
+export { maintenanceWorker } from './maintenance.worker';
 export { startScheduler, stopScheduler } from './scheduler';
 export { webhookDeliveryWorker } from '../jobs/webhookDelivery.job';

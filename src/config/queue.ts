@@ -55,4 +55,5 @@ export const CONCURRENCY = {
   PAYMENT_POLL: 5,
   REPORT: 2,
   SESSION_REMINDER: 1,
+  MAINTENANCE: 1,
 } as const;

@@ -157,7 +157,7 @@ export class LearnerService {
 
     // Calculate longest streak
     tempStreak = 1;
-    longest = 1;
+    longest = 0;
     for (let i = 0; i < dates.length - 1; i++) {
       const d1 = new Date(dates[i]);
       d1.setHours(0, 0, 0, 0);
