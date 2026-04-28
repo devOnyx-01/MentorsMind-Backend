@@ -40,6 +40,7 @@ export const QUEUE_NAMES = {
   EXPORT: "export-queue",
   SESSION_REMINDER: "session-reminder-queue",
   AUDIT_LOG: "audit-log-queue",
+  MAINTENANCE: "maintenance-queue",
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -54,4 +55,5 @@ export const CONCURRENCY = {
   PAYMENT_POLL: 5,
   REPORT: 2,
   SESSION_REMINDER: 1,
+  MAINTENANCE: 1,
 } as const;
