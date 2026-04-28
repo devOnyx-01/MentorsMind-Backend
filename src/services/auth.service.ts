@@ -100,7 +100,10 @@ export const AuthService = {
     }
 
     const fingerprint = userAgent ? `${ipAddress}:${userAgent}` : undefined;
-    const tokens = await TokenService.issueTokens(user.id, email, user.role, fingerprint);
+    const tokens = await TokenService.issueTokens(user.id, email, user.role, fingerprint, {
+      deviceName: userAgent ?? undefined,
+      ipAddress: ipAddress ?? undefined,
+    });
 
     const { SessionManagerService } = await import('./sessionManager.service');
     await SessionManagerService.createSession({
