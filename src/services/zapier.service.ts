@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import pool from "../config/database";
 import { MessagingService } from "./messaging.service";
+import { GoalService } from "./goal.service";
 
 const TRIGGERS = [
   "new_booking",
@@ -168,6 +169,28 @@ export const ZapierService = {
     return samples[trigger];
   },
 
+  getSampleActionPayload(action: ActionName): Record<string, unknown> {
+    const samples: Record<ActionName, Record<string, unknown>> = {
+      send_message: {
+        conversationId: "conversation_sample_123",
+        body: "Hello! This is a test message from Zapier.",
+      },
+      create_note: {
+        bookingId: "booking_sample_123",
+        authorId: "user_123",
+        content: "This is a private note about the booking.",
+        isPrivate: true,
+      },
+      update_goal_progress: {
+        goalId: "goal_sample_123",
+        learnerId: "learner_123",
+        progress: 75,
+      },
+    };
+
+    return samples[action];
+  },
+
   async executeAction(
     action: ActionName,
     payload: Record<string, any>,
@@ -212,20 +235,20 @@ export const ZapierService = {
       return { noteId: rows[0].id };
     }
 
-    const { rows } = await pool.query(
-      `UPDATE learner_progress
-          SET total_sessions = COALESCE($2, total_sessions),
-              total_hours_spent = COALESCE($3, total_hours_spent),
-              last_updated = NOW()
-        WHERE learner_id = $1
-        RETURNING *`,
-      [
-        payload.learnerId,
-        payload.totalSessions ?? null,
-        payload.totalHoursSpent ?? null,
-      ],
-    );
+    if (action === "update_goal_progress") {
+      if (!payload.goalId || !payload.learnerId || payload.progress === undefined) {
+        throw new Error("Missing required fields: goalId, learnerId, progress");
+      }
 
-    return { updated: true, progress: rows[0] ?? null };
+      const updatedGoal = await GoalService.updateProgress(
+        payload.goalId,
+        payload.learnerId,
+        Number(payload.progress)
+      );
+
+      return { updated: true, goal: updatedGoal };
+    }
+
+    throw new Error(`Unknown action: ${action}`);
   },
 };

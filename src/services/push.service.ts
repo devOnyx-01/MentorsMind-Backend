@@ -89,8 +89,7 @@ export const PushService = {
       }
 
       // Check user notification preferences
-      const user = await UsersService.findById(userId);
-      const preferences = user?.notification_preferences;
+      const preferences = await UsersService.getNotificationPreferences(userId);
 
       if (preferences) {
         const type = data?.type;
