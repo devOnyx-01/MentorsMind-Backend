@@ -1,4 +1,4 @@
-import { WsService } from '../../services/ws.service';
+import { SocketService } from '../../services/socket.service';
 import { logger } from '../../utils/logger.utils';
 
 export interface BookingNotificationPayload {
@@ -36,8 +36,8 @@ export async function notifyBookingConfirmed(
   };
 
   await Promise.all([
-    WsService.publish(menteeId, menteeMsg.event, menteeMsg.data),
-    WsService.publish(mentorId, mentorMsg.event, mentorMsg.data),
+    SocketService.emitToUser(menteeId, menteeMsg.event, menteeMsg.data),
+    SocketService.emitToUser(mentorId, mentorMsg.event, mentorMsg.data),
   ]);
 
   logger.info('WS notification: booking confirmed', {
@@ -56,8 +56,8 @@ export async function notifyBookingCancelled(
   const { mentorId, menteeId, bookingId } = payload;
 
   await Promise.all([
-    WsService.publish(menteeId, 'booking:cancelled', { bookingId }),
-    WsService.publish(mentorId, 'booking:cancelled', { bookingId, menteeId }),
+    SocketService.emitToUser(menteeId, 'booking:cancelled', { bookingId }),
+    SocketService.emitToUser(mentorId, 'booking:cancelled', { bookingId, menteeId }),
   ]);
 
   logger.info('WS notification: booking cancelled', { bookingId });
@@ -71,7 +71,7 @@ export async function notifySessionStatus(
 ): Promise<void> {
   const { userId, sessionId, status, meetingUrl } = payload;
 
-  await WsService.publish(userId, 'session:status', {
+  SocketService.emitToUser(userId, 'session:status', {
     sessionId,
     status,
     meetingUrl,

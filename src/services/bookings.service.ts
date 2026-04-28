@@ -78,8 +78,12 @@ function isCancelledBeforeSession(booking: BookingRecord): boolean {
 }
 
 export const BookingsService = {
+  /**
+   * Initialize bookings service (starts background monitoring only).
+   * Table schema is managed by migrations, not runtime DDL.
+   */
   async initialize(): Promise<void> {
-    await BookingModel.initializeTable();
+    // Start pending escrow monitoring (background job)
     SorobanEscrowService.startPendingEscrowMonitoring();
   },
 

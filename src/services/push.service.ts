@@ -25,13 +25,13 @@ export interface PushSendResult {
  * Push Notification Service using Firebase Cloud Messaging
  */
 export const PushService = {
-  initialized: false,
-
   /**
    * Initialize Firebase Admin SDK
    */
   initialize(): void {
-    if (this.initialized) {
+    // Use admin.apps.length as the canonical guard — safe across module reloads
+    // and test environments where initializeApp() may be called multiple times.
+    if (admin.apps.length > 0) {
       return;
     }
 
@@ -48,7 +48,7 @@ export const PushService = {
         return;
       }
 
-      // Initialize Firebase Admin
+      // Initialize Firebase Admin only when no app exists yet
       admin.initializeApp({
         credential: admin.credential.cert({
           projectId: env.FIREBASE_PROJECT_ID,
@@ -57,7 +57,6 @@ export const PushService = {
         }),
       });
 
-      this.initialized = true;
       logger.info("Firebase Admin SDK initialized successfully");
     } catch (error) {
       logger.error("Failed to initialize Firebase Admin SDK:", error);
@@ -83,14 +82,13 @@ export const PushService = {
 
     try {
       // Check if Firebase is initialized
-      if (!this.initialized) {
+      if (admin.apps.length === 0) {
         result.errors.push("Firebase not initialized");
         return result;
       }
 
       // Check user notification preferences
-      const user = await UsersService.findById(userId);
-      const preferences = user?.notification_preferences;
+      const preferences = await UsersService.getNotificationPreferences(userId);
 
       if (preferences) {
         const type = data?.type;
@@ -165,7 +163,7 @@ export const PushService = {
       errors: [],
     };
 
-    if (!this.initialized) {
+    if (admin.apps.length === 0) {
       result.errors.push("Firebase not initialized");
       return result;
     }

@@ -217,6 +217,10 @@ router.get(
   "/deletion-requests",
   asyncHandler(AdminController.listDeletionRequests),
 );
+router.post(
+  "/deletion-requests/retry",
+  asyncHandler(AdminController.retryFailedDeletions),
+);
 
 /**
  * @swagger

@@ -9,6 +9,17 @@ const eventHistory = new Map<
   Array<{ event: string; data: any; timestamp: Date }>
 >();
 const MAX_HISTORY_EVENTS = 5;
+const EVENT_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+// Periodically evict users whose entire event history has expired
+setInterval(() => {
+  const now = Date.now();
+  for (const [userId, events] of eventHistory) {
+    if (events.every((e) => now - e.timestamp.getTime() > EVENT_TTL_MS)) {
+      eventHistory.delete(userId);
+    }
+  }
+}, 60_000).unref(); // unref so this timer doesn't prevent process exit
 
 export function initializeSocketService(socketServer: SocketIOServer): void {
   io = socketServer;
@@ -87,12 +98,26 @@ export const SocketService = {
       return;
     }
 
+    // Drop events older than the TTL before replaying
+    const now = Date.now();
+    const fresh = userEvents.filter(
+      (e) => now - e.timestamp.getTime() <= EVENT_TTL_MS,
+    );
+
+    if (fresh.length === 0) {
+      eventHistory.delete(userId);
+      return;
+    }
+
+    // Update the stored array to only the fresh events
+    eventHistory.set(userId, fresh);
+
     logger.info("SocketService: Replaying missed events", {
       userId,
-      eventCount: userEvents.length,
+      eventCount: fresh.length,
     });
 
-    userEvents.forEach(({ event, data }) => {
+    fresh.forEach(({ event, data }) => {
       this.emitToUser(userId, event, data);
     });
   },

@@ -20,7 +20,6 @@ Sentry.init({
 // Config must be imported first — validates env vars before anything else loads
 import config from "./config";
 import app from "./app";
-import { initializeModels } from "./models";
 import { createSocketServer } from "./config/socket";
 import { initializeSocketService } from "./services/socket.service";
 import { initializeGraphQL } from "./graphql/server";
@@ -44,13 +43,9 @@ import { initializeEmailTemplates } from "./services/template-initializer.servic
 import { logger } from "./utils/logger.utils";
 import { validateRequiredTables } from "./utils/table-validator.utils";
 
-// Initialize database tables, then seed email templates
-initializeModels()
-  .then(() => initializeEmailTemplates())
-  .then(() => {
-    // Validate that all required tables exist (from migrations)
-    return validateRequiredTables();
-  })
+// Validate that all required tables exist (from migrations)
+// This replaces the anti-pattern of creating tables at runtime via DDL
+validateRequiredTables()
   .then((validation) => {
     if (!validation.allTablesExist) {
       logger.error(
@@ -65,9 +60,13 @@ initializeModels()
     }
   })
   .catch((err) => {
-    logger.error({ err }, "Failed to initialize models or validate tables");
-    console.error("Failed to initialize models:", err);
+    logger.error({ err }, "Failed to validate database tables");
   });
+
+// Initialize email templates
+initializeEmailTemplates().catch((err) => {
+  logger.error("Failed to initialize email templates", { error: err });
+});
 
 // Initialize JWKS key store (generates RSA key pair if none exists)
 import("./services/jwks.service").then(({ JwksService }) =>

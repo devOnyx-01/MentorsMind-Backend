@@ -30,22 +30,17 @@ import { BookingsService } from "../../services/bookings.service";
 import { logger } from "../../utils/logger";
 import { VerificationService } from "../../services/verification.service";
 import { notificationCleanupService } from "../../services/notification-cleanup.service";
-import { RecommendationService } from "../../services/recommendation.service";
 
 const router = Router();
 
 // Service initialization (async, non-blocking)
+// Note: These services no longer create tables at runtime.
+// Table schema is managed exclusively by migration files.
 BookingsService.initialize().catch((err) => {
-  logger.error("Failed to initialize bookings tables:", err);
-});
-VerificationService.initialize().catch((err: unknown) => {
-  logger.error("Failed to initialize verification tables:", err);
+  logger.error("Failed to initialize bookings service:", err);
 });
 notificationCleanupService.initialize().catch((err: unknown) => {
   logger.error("Failed to initialize notification cleanup service:", err);
-});
-RecommendationService.initialize().catch((err: unknown) => {
-  logger.error("Failed to initialize recommendation tables:", err);
 });
 
 import goalRoutes from "../goal.routes";

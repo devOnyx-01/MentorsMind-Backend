@@ -9,11 +9,9 @@ import {
   ResetPasswordInput,
 } from "../validators/auth.validator";
 import { UserRecord } from "./users.service";
+import { TokenService } from "./token.service";
 
 const JWT_SECRET = env.JWT_SECRET;
-const JWT_REFRESH_SECRET = env.JWT_REFRESH_SECRET;
-const ACCESS_TOKEN_EXPIRED_IN = "15m";
-const REFRESH_TOKEN_EXPIRED_IN = "7d";
 
 export interface AuthTokens {
   accessToken: string;
@@ -22,21 +20,16 @@ export interface AuthTokens {
 
 export interface AuthUserRecord extends UserRecord {
   password_hash: string;
-  refresh_token: string | null;
   reset_token: string | null;
   reset_token_expires: Date | null;
 }
 
 export const AuthService = {
-  /**
-   * Register a new user
-   */
   async register(
     input: RegisterInput,
   ): Promise<AuthTokens & { userId: string }> {
     const { email, password, firstName, lastName, role } = input;
 
-    // Check if email already exists
     const checkQuery = `SELECT id FROM users WHERE email = $1`;
     const checkResult = await pool.query(checkQuery, [email]);
     if (checkResult.rows.length > 0) {
@@ -72,132 +65,104 @@ export const AuthService = {
     ]);
     const user = rows[0];
 
-    const tokens = await this.generateTokens(user.id, user.role);
+    const tokens = await TokenService.issueTokens(user.id, email, user.role);
     return { ...tokens, userId: user.id };
   },
 
-  /**
-   * Login an existing user
-   */
-  /**
-   * Login an existing user
-   */
-  async login(
-    input: LoginInput,
-    ipAddress?: string | null,
-    userAgent?: string | null,
-  ): Promise<any> {
+  async login(input: LoginInput, ipAddress?: string | null, userAgent?: string | null): Promise<any> {
     const { email, password } = input;
 
     const query = `
       SELECT id, role, password_hash, mfa_enabled 
       FROM users 
-      WHERE email = $1 AND is_active = true
+      WHERE email = $1 AND status = 'active' AND deleted_at IS NULL
     `;
     const { rows } = await pool.query(query, [email]);
 
     if (rows.length === 0) {
-      throw new Error("Invalid email or password.");
+      throw new Error('Invalid email or password.');
     }
 
     const user = rows[0];
     const isMatch = await bcrypt.compare(password, user.password_hash);
 
     if (!isMatch) {
-      throw new Error("Invalid email or password.");
+      throw new Error('Invalid email or password.');
     }
 
-    // If MFA is enabled, return MFA required status and a short-lived token
     if (user.mfa_enabled) {
       const mfaToken = jwt.sign(
         { sub: user.id, mfaPending: true },
         JWT_SECRET,
-        { expiresIn: "5m" },
+        { expiresIn: '5m' }
       );
       return { mfaRequired: true, mfaToken, userId: user.id };
     }
 
-    const tokens = await this.generateTokens(user.id, user.role);
+    const fingerprint = userAgent ? `${ipAddress}:${userAgent}` : undefined;
+    const tokens = await TokenService.issueTokens(user.id, email, user.role, fingerprint, {
+      deviceName: userAgent ?? undefined,
+      ipAddress: ipAddress ?? undefined,
+    });
 
-    // Create a tracked session for device management
-    const { SessionManagerService } = await import("./sessionManager.service");
+    const { SessionManagerService } = await import('./sessionManager.service');
     await SessionManagerService.createSession({
       userId: user.id,
       refreshToken: tokens.refreshToken,
       ipAddress: ipAddress ?? null,
       userAgent: userAgent ?? null,
       userEmail: email,
-    }).catch(() => {
-      /* non-fatal */
-    });
+    }).catch(() => { });
 
     return { tokens, userId: user.id, role: user.role };
   },
 
-  /**
-   * Logout user by clearing their refresh token
-   */
-  async logout(userId: string, refreshToken?: string): Promise<void> {
-    const query = `UPDATE users SET refresh_token = NULL WHERE id = $1`;
-    await pool.query(query, [userId]);
+  async refresh(refreshToken: string, fingerprint?: string): Promise<AuthTokens> {
+    return TokenService.rotateRefreshToken(refreshToken, fingerprint);
+  },
 
-    // Revoke the session associated with this refresh token
+  async logout(userId: string, refreshToken?: string): Promise<void> {
     if (refreshToken) {
-      const { SessionManagerService } =
-        await import("./sessionManager.service");
-      await SessionManagerService.revokeSessionByToken(refreshToken).catch(
-        () => {
-          /* non-fatal */
-        },
-      );
+      await TokenService.revokeRefreshToken(refreshToken);
+
+      const { SessionManagerService } = await import('./sessionManager.service');
+      await SessionManagerService.revokeSessionByToken(refreshToken).catch(() => { });
+    } else {
+      await TokenService.revokeAllUserSessions(userId);
     }
   },
 
-  /**
-   * Handle forgot password
-   */
   async forgotPassword(email: string): Promise<string> {
-    const query = `SELECT id FROM users WHERE email = $1 AND is_active = true`;
+    const query = `SELECT id FROM users WHERE email = $1 AND status = 'active' AND deleted_at IS NULL`;
     const { rows } = await pool.query(query, [email]);
 
     if (rows.length === 0) {
-      // Don't reveal if user exists or not, just return early
-      return "";
+      return '';
     }
 
-    const resetToken = crypto.randomBytes(32).toString("hex");
-    const resetTokenHash = crypto
-      .createHash("sha256")
-      .update(resetToken)
-      .digest("hex");
-    const expires = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+    const expires = new Date(Date.now() + 15 * 60 * 1000);
 
     await pool.query(
       `UPDATE users SET reset_token = $1, reset_token_expires = $2 WHERE id = $3`,
-      [resetTokenHash, expires, rows[0].id],
+      [resetTokenHash, expires, rows[0].id]
     );
 
-    // Normally we would send an email here
     return resetToken;
   },
 
-  /**
-   * Reset password via token
-   */
   async resetPassword(input: ResetPasswordInput): Promise<string> {
-    const resetTokenHash = crypto
-      .createHash("sha256")
-      .update(input.token)
-      .digest("hex");
+    const resetTokenHash = crypto.createHash('sha256').update(input.token).digest('hex');
 
     const query = `
       SELECT id FROM users 
-      WHERE reset_token = $1 AND reset_token_expires > NOW() AND is_active = true
+      WHERE reset_token = $1 AND reset_token_expires > NOW() AND status = 'active' AND deleted_at IS NULL
     `;
     const { rows } = await pool.query(query, [resetTokenHash]);
 
     if (rows.length === 0) {
-      throw new Error("Invalid or expired reset token.");
+      throw new Error('Invalid or expired reset token.');
     }
 
     const userId = rows[0].id;
@@ -206,45 +171,11 @@ export const AuthService = {
 
     await pool.query(
       `UPDATE users SET password_hash = $1, reset_token = NULL, reset_token_expires = NULL WHERE id = $2`,
-      [passwordHash, userId],
+      [passwordHash, userId]
     );
 
+    await TokenService.revokeAllUserSessions(userId);
+
     return userId;
-  },
-
-  /**
-   * Generate access and refresh tokens, and save refresh token to DB.
-   * Access tokens are signed with RSA-256 (asymmetric) via JwksService.
-   * Refresh tokens remain HMAC-256 (opaque rotation tokens, not third-party verified).
-   */
-  async generateTokens(userId: string, role: string): Promise<AuthTokens> {
-    const { JwksService } = await import("./jwks.service");
-    const currentKey = await JwksService.getCurrentKey();
-
-    let accessToken: string;
-    if (currentKey) {
-      accessToken = jwt.sign({ sub: userId, role }, currentKey.privateKeyPem, {
-        algorithm: "RS256",
-        expiresIn: ACCESS_TOKEN_EXPIRED_IN,
-        keyid: currentKey.kid,
-      });
-    } else {
-      // Fallback to HMAC during startup before keys are initialised
-      accessToken = jwt.sign({ sub: userId, role }, JWT_SECRET, {
-        expiresIn: ACCESS_TOKEN_EXPIRED_IN,
-      });
-    }
-
-    const refreshToken = jwt.sign({ sub: userId, role }, JWT_REFRESH_SECRET, {
-      expiresIn: REFRESH_TOKEN_EXPIRED_IN,
-    });
-
-    // Save refresh token to DB (basic token rotation implementation)
-    await pool.query(`UPDATE users SET refresh_token = $1 WHERE id = $2`, [
-      refreshToken,
-      userId,
-    ]);
-
-    return { accessToken, refreshToken };
   },
 };

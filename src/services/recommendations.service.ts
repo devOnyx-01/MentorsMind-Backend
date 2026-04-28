@@ -1,17 +1,31 @@
-import db from '../config/db';
+import pool from '../config/database';
 
 export class RecommendationService {
-  static async getRecommendedMentors(learnerId: number) {
-    // Basic logic: Find mentors who teach skills the learner is interested in
+  static async getRecommendedMentors(learnerId: string) {
     const query = `
-      SELECT m.* FROM mentors m
-      JOIN mentor_skills ms ON m.id = ms.mentor_id
-      WHERE ms.skill_name IN (
-        SELECT unnest(interests) FROM learners WHERE id = $1
-      )
+      SELECT 
+        u.id, 
+        u.full_name AS name,
+        u.bio, 
+        u.hourly_rate, 
+        u.expertise, 
+        u.average_rating,
+        u.total_reviews,
+        u.years_of_experience
+      FROM users u
+      WHERE u.role = 'mentor' 
+        AND u.status = 'active'
+        AND u.is_available = true
+        AND u.deleted_at IS NULL
+        AND u.expertise && (
+          SELECT COALESCE(array_agg(DISTINCT unnest), ARRAY[]::text[])
+          FROM learner_goals
+          WHERE learner_id = $1
+        )
+      ORDER BY u.average_rating DESC NULLS LAST, u.total_reviews DESC
       LIMIT 5
     `;
-    const result = await db.query(query, [learnerId]);
+    const result = await pool.query(query, [learnerId]);
     return result.rows;
   }
 }
